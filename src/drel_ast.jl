@@ -385,31 +385,34 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
         if ast_node.head == :(=) && typeof(ast_node.args[1]) == Symbol
             lh = ast_node.args[1]
             # Check for set category assignments
-            if typeof(ast_node.args[2]) == Symbol
-                rhs_symb = ast_node.args[2]
-                if typeof(rhs_symb) == Expr && rhs_symb.head == :call
+            rhs_symb = ast_node.args[2]
+            if typeof(rhs_symb) == Expr
+                if rhs_symb.head == :call
                     if rhs_symb.args[1] == :first_packet   #a Set category
                         found_cats[lh] = rhs_symb.args[2].args[3]
                         #first_packet(CategoryObject(__datablock,<set category>))
-                        println("Assignment of $rhs_symb to $lh")
+                        println("Assignment of $(found_cats[lh]) to $lh")
+                    elseif rhs_symb.args[1] == :CategoryObject  #Loop category
+                        found_cats[lh] = rhs_symb.args[3]
+                        println("Assignment of $(found_cats[lh]) to $lh")
                     end
-                elseif typeof(rhs_symb) == Symbol && String(rhs_symb) in all_cats
-                    found_cats[lh] = String(rhs_symb)
-                    println("Assignment of $rhs_symb to $lh")
-                elseif rhs_symb == :__packet
-                    found_cats[lh] = calc_cat
-                    println("__packet -> $lh")
-                else
-                    println("Ignoring $lh = $rhs_symb")
                 end
-            elseif typeof(ast_node.args[2]) == Expr
                 map(q -> append!(dn_list,q),
                     [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
+            elseif typeof(rhs_symb) == Symbol && String(rhs_symb) in all_cats
+                found_cats[lh] = String(rhs_symb)
+                println("Assignment of $rhs_symb to $lh")
+            elseif rhs_symb == :__packet
+                found_cats[lh] = calc_cat
+                println("__packet -> $lh")
+            else
+                println("Warning: ignoring $rhs_symb")
             end
         elseif ast_node.head in [:for]
             map(q -> append!(dn_list,q),
                 [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
         # handle subscriptions
+        # Example: (atom_type_scat[a.type_symbol]).dispersion    
         elseif ast_node.head == :call && ast_node.args[1] == :getindex
             if ast_node.args[2] in keys(found_cats)
                 # if assignment to '__packet', look further
@@ -434,6 +437,19 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
                 push!(dn_list,(target_cat,String(ast_node.args[2].value)))
             elseif typeof(ast_node.args[1])!= Expr && String(ast_node.args[1]) in set_cats
                 push!(dn_list,(String(ast_node.args[1]),String(ast_node.args[2].value)))
+            elseif typeof(ast_node.args[1])==Expr
+                # dig out expressions of form "(a[b]).c"
+                sub_expr = ast_node.args[1]
+                if sub_expr.head == :ref
+                    if sub_expr.args[1] in keys(found_cats)
+                        # if assignment to '__packet', look further
+                        target_cat = found_cats[sub_expr.args[1]]
+                        push!(dn_list,(target_cat,String(ast_node.args[2].value)))
+                        return dn_list
+                    end
+                end
+                map(q -> append!(dn_list,q),
+                    [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
             end
         else
             map(q -> append!(dn_list,q),
