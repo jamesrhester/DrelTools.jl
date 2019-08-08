@@ -22,6 +22,7 @@ end
 
 CategoryObject(datablock::cif_container_with_dict,catname) = begin
     cifdic = get_dictionary(datablock)
+    raw_data = get_datablock(datablock)
     object_names = [a for a in keys(cifdic) if lowercase(get(cifdic[a],"_name.category_id",[""])[1]) == lowercase(catname)]
     data_names = [cifdic[a]["_definition.id"][1] for a in object_names]
     internal_object_names = [cifdic[a]["_name.object_id"][1] for a in data_names]
@@ -33,9 +34,9 @@ CategoryObject(datablock::cif_container_with_dict,catname) = begin
     if is_looped
         key_names = [name_to_object[a] for a in cifdic[catname]["_category_key.name"]]
     end
-    actual_data = get_loop(datablock,data_names[1])
+    actual_data = get_loop(raw_data,data_names[1])
     if !is_looped && size(actual_data,2) == 0  #no packets in a set category
-        actual_data[gensym()] = [missing]
+        actual_data[!,gensym()] = [missing]
     end
     CategoryObject(datablock,catname,object_names,data_names,actual_data,internal_object_names,
         name_to_object,object_to_name,key_names,is_looped,have_vals)

@@ -25,7 +25,7 @@ inside calls of 'ismissing' in order to do this.
 # and for the filtered AST.
 
 ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array{String}[],all_cats=Array{String}[]) = begin
-    println("$ast_node: in scope $in_scope_dict")
+    #println("$ast_node: in scope $in_scope_dict")
     ixpr = :(:call,:f)  #dummy
     if typeof(ast_node) == Expr
         if ast_node.head == :(=) && typeof(ast_node.args[1]) == Symbol # simple assignment
@@ -37,13 +37,13 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
                     if rhs_symb.args[1] == :first_packet   #a Set category
                         in_scope_dict[lh] = rhs_symb.args[2].args[3]
                         #first_packet(CategoryObject(__datablock,<set category>))
-                        println("Assignment of $rhs_symb to $lh")
+                        #println("Assignment of $rhs_symb to $lh")
                     end
                 elseif rhs_symb == :__packet
                     in_scope_dict[lh] = in_scope_dict[:__packet]
-                    println("__packet -> $lh")
+                    #println("__packet -> $lh")
                 else
-                    println("Ignoring $lh = $rhs_symb")
+                    #println("Ignoring $lh = $rhs_symb")
                 end
             end
             ixpr.head = ast_node.head
@@ -456,8 +456,8 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
                 [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
         end
     else
-        println("Non-expr node $ast_node ; ignored")
+        #println("Non-expr node $ast_node ; ignored")
     end
-    println("Returning $dn_list")
+    #println("Returning $dn_list")
     return dn_list
 end
