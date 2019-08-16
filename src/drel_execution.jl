@@ -1,6 +1,7 @@
 #== This module defines functions for executing dREL code ==#
 
 export dynamic_block, define_dict_funcs, derive, get_func_text
+export add_definition_func
 
 # Python setup calls
 
@@ -23,7 +24,7 @@ const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
 
 lark_grammar() = begin
     grammar_text = read(joinpath(@__DIR__,drel_grammar),String)
-    parser = lark[:Lark](grammar_text,start="input",parser="lalr",lexer="contextual")
+    parser = lark.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
 end
 
 # Parse and output proto-Julia code using Python Lark. We cannot pass complex
@@ -38,7 +39,7 @@ lark_transformer(dname,dict,all_funcs,cat_list,func_cat) = begin
     if lowercase(target_cat) == func_cat
         is_func = true
     end
-    tt = jl_transformer[:TreeToPy](dname,target_cat,target_obj,cat_list,is_func=is_func,func_list=all_funcs)
+    tt = jl_transformer.TreeToPy(dname,target_cat,target_obj,cat_list,is_func=is_func,func_list=all_funcs)
 end
 
 #== Functions defined in the dictionary are detected and adjusted while parsing. 
@@ -83,9 +84,9 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     func_cat,all_funcs = get_dict_funcs(dict)
     cat_names = get_cat_names(dict)
     target_cat = find_category(dict,dataname)
-    tree = parser[:parse](drel_text)
+    tree = parser.parse(drel_text)
     transformer = lark_transformer(dataname,dict,all_funcs,cat_names,func_cat)
-    tc_aliases,proto = transformer[:transform](tree)
+    tc_aliases,proto = transformer.transform(tree)
     println("Proto-Julia code: ")
     println(proto)
     set_categories = get_set_categories(dict)
@@ -94,7 +95,11 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     # catch implicit matrix assignments
     container_type = dict[dataname]["_type.container"][1]
     is_matrix = (container_type == "Matrix" || container_type == "Array")
-    parsed = find_target(parsed,tc_aliases,transformer[:target_object];is_matrix=is_matrix)
+    ft,parsed = find_target(parsed,tc_aliases,transformer[:target_object];is_matrix=is_matrix)
+    if ft == nothing
+        println("Warning: no target identified for $dataname")
+    end
+    
     parsed = fix_scope(parsed)
     parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     println("####\n    Assigning types\n####\n")
@@ -103,15 +108,15 @@ end
 
 #== Extract the dREL text from the dictionary, if any
 ==#
-get_func_text(dict::abstract_cif_dictionary,dataname::String) =  begin
+get_func_text(dict::abstract_cif_dictionary,dataname::String,meth_type::String) =  begin
     full_def = dict[dataname]
     func_text = get_loop(full_def,"_method.expression")
     if size(func_text,2) == 0   #nothing
         return ""
     end
     # TODO: allow multiple methods
-    eval_func = func_text[func_text[!,Symbol("_method.purpose")] .== "Evaluation",:]
-    eval_func = eval_func[1,Symbol("_method.expression")]
+    eval_meths = func_text[func_text[!,Symbol("_method.purpose")] .== meth_type,:]
+    eval_meth = eval_meths[1,Symbol("_method.expression")]
 end
 
 define_dict_funcs(c::abstract_cif_dictionary) = begin
@@ -132,25 +137,57 @@ define_dict_funcs(c::abstract_cif_dictionary) = begin
     end
 end
 
+#== Dynamic blocks
+
+A dynamic block, in addition to knowing types and default values, will also
+actively seek to derive missing information, including calculation of
+default values.
+
+==#
+
 struct dynamic_block <: cif_container_with_dict
     block::cif_block_with_dict
 end
 
 CrystalInfoFramework.get_dictionary(d::dynamic_block) = get_dictionary(d.block)
 CrystalInfoFramework.get_datablock(d::dynamic_block) = get_datablock(d.block)
+CrystalInfoFramework.get_typed_datablock(d::dynamic_block) = d.block
 
 Base.getindex(d::dynamic_block,s::String) = begin
     try
         q = d.block[s]
     catch KeyError
-        derive(d,s)
+        m = derive(d,s)
+        accept = any(x->!ismissing(x),m)
+        if !accept
+            m = CrystalInfoFramework.get_default(d,s)
+        end
+        m
     end
 end
+
+# This method actively tries to derive default values
+CrystalInfoFramework.get_default(d::dynamic_block,s::String) = begin
+    dict = get_dictionary(d)
+    def_vals = CrystalInfoFramework.get_default(dict,s)
+    target_loop = CategoryObject(d,find_category(dict,s))
+    if !ismissing(def_vals)
+        return [def_vals for i in target_loop]
+    end
+    # is there a derived default available?
+    if !haskey(dict.def_meths,(s,"enumeration.default"))
+        add_definition_func!(dict,s)
+    end
+    func_code = get_def_meth(d,s,"enumeration.default")
+    return [Base.invokelatest(func_code,d,p) for p in target_loop]
+end
+
 
 #==Derive all values in a loop for the given
 dataname==#
 
-derive(d::cif_container_with_dict,s::String) = begin
+derive(d::dynamic_block,s::String) = begin
+    println("###\n\n    Deriving $s\n#####")
     dict = get_dictionary(d)
     if !(has_func(dict,s))
         add_new_func(dict,s)
@@ -163,7 +200,7 @@ end
 #==This is called from within a dREL method when an item is
 found missing from a packet==#
 
-derive(d::cif_container_with_dict,cat::String,obj::String,p::CatPacket) = begin
+derive(d::dynamic_block,cat::String,obj::String,p::CatPacket) = begin
     dict = get_dictionary(d)
     dataname = get_by_cat_obj(dict,(cat,obj))["_definition.id"][1]
     if !(has_func(dict,dataname))
@@ -173,7 +210,26 @@ derive(d::cif_container_with_dict,cat::String,obj::String,p::CatPacket) = begin
     Base.invokelatest(func_code,d,p)
 end
 
-#== We redefine getproperty to allow derivation
+# For a single row in a packet
+CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
+    dict = get_dictionary(cp)
+    block = getfield(cp,:parent).datablock
+    mycat = get_name(cp)
+    dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
+    def_val = CrystalInfoFramework.get_default(dict,dataname)
+    if !ismissing(def_val)
+        return def_val
+    end
+    if !haskey(dict.def_meths,(dataname,"_enumeration.default"))
+        add_definition_func!(dict,dataname)
+    end
+    func_code = get_def_meth(d,s,"enumeration.default")
+    return Base.invokelatest(func_code,block,cp)
+end
+
+
+#== We redefine getproperty to allow derivation inside category
+packets.
 ==#
 
 Base.getproperty(cp::CatPacket,obj::Symbol) = begin
@@ -183,12 +239,16 @@ Base.getproperty(cp::CatPacket,obj::Symbol) = begin
         #println("$(getfield(cp,:dfr)) has no member $obj:deriving...")
         # get the parent container with dictionary
         db = getfield(cp,:parent).datablock
-        return derive(db,get_name(cp),String(obj),cp)
+        m = derive(db,get_name(cp),String(obj),cp)
+        if ismissing(m)
+            m = CrystalInfoFramework.get_default(cp,obj)
+        end
+        m
     end
 end
 
 add_new_func(d::abstract_cif_dictionary,s::String) = begin
-    t = get_func_text(d,s)
+    t = get_func_text(d,s,"Evaluation")
     if t != ""
         parser = lark_grammar()
         r = make_julia_code(t,s,d,parser)
@@ -198,4 +258,58 @@ add_new_func(d::abstract_cif_dictionary,s::String) = begin
     println("Transformed code for $s:\n")
     println(r)
     set_func!(d,s, r, eval(r))
+end
+
+#== Definition methods.
+
+A definition method defines a value for a DDLm attribute that depends
+on some aspects of a specific data file. Typically this will
+be units or default values.  When a definition method is found,
+the particular attribute that it assigns is determined, and the
+getindex function for that definition redirected to obtain this
+value.
+
+==#
+
+"""
+add_definition_func(dictionary,dataname)
+
+Add a method that adjusts the definition of dataname by defining
+a DDLm attribute.
+
+TODO: add multiple definition funcs
+
+We do not define any function for those cases in which there is
+an attribute defined. This should cause errors if we attempt to
+derive an attribute.
+"""
+
+const all_set_ddlm = [("units","code"),("enumeration","default")]
+
+add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
+    # set defaults
+    r = Meta.parse("(a,b) -> missing")
+    for (c,o) in all_set_ddlm
+        if !haskey(d[s],"_$c.$o")
+            set_func!(d,s,"$c.$o",r,eval(r))
+        end
+    end
+    # now add any redefinitions
+    t = get_func_text(d,s,"Definition")
+    if t != ""
+        parser = lark_grammar()
+        r = make_julia_code(t,s,d,parser)
+        att_name = "not found"
+        for (a,targ) in all_set_ddlm
+            ft,r = find_target(r,a,targ)
+            if ft != nothing
+                att_name = "$(ft[1]).$(ft[2])"
+                break
+            end
+        end
+        println("For dataname $s, attribute $att_name")
+        println("Transformed code:\n")
+        println(r)
+        set_func!(d,s,att_name,r,eval(r))
+    end
 end

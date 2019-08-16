@@ -20,16 +20,16 @@ struct CategoryObject
     have_vals
 end
 
-CategoryObject(datablock::cif_container_with_dict,catname) = begin
-    cifdic = get_dictionary(datablock)
-    raw_data = get_datablock(datablock)
+CategoryObject(data::cif_container_with_dict,catname) = begin
+    cifdic = get_dictionary(data)
+    raw_data = get_typed_datablock(data)
     object_names = [a for a in keys(cifdic) if lowercase(get(cifdic[a],"_name.category_id",[""])[1]) == lowercase(catname)]
     data_names = [cifdic[a]["_definition.id"][1] for a in object_names]
     internal_object_names = [cifdic[a]["_name.object_id"][1] for a in data_names]
     name_to_object = Dict(zip(data_names,internal_object_names))
     object_to_name = Dict(zip(internal_object_names,data_names))
     is_looped = get(cifdic[catname],"_definition.class",["Set"])[1] == "Loop"
-    have_vals = [k for k in data_names if k in keys(datablock)]
+    have_vals = [k for k in data_names if k in keys(raw_data)]
     key_names = []
     if is_looped
         key_names = [name_to_object[a] for a in cifdic[catname]["_category_key.name"]]
@@ -38,7 +38,7 @@ CategoryObject(datablock::cif_container_with_dict,catname) = begin
     if !is_looped && size(actual_data,2) == 0  #no packets in a set category
         actual_data[!,gensym()] = [missing]
     end
-    CategoryObject(datablock,catname,object_names,data_names,actual_data,internal_object_names,
+    CategoryObject(data,catname,object_names,data_names,actual_data,internal_object_names,
         name_to_object,object_to_name,key_names,is_looped,have_vals)
 end
 
@@ -81,7 +81,9 @@ Base.getindex(c::CategoryObject, x::Union{String,Array{Any},Number}) = begin
 end
 
 Base.length(c::CategoryObject) = size(c.data_frame,1)
-    
+get_dictionary(c::CategoryObject) = get_dictionary(c.datablock)
+get_datablock(c::CategoryObject) = get_datablock(c.datablock)
+
 # We can't use a dataframerow by itself as we need to know the
 # category name for use in deriving missing parts of the packet
 # We store the parent as a source for derivation information
@@ -93,7 +95,7 @@ struct CatPacket
 end
 
 get_name(c::CatPacket) = return getfield(c,:name)
-
+get_dictionary(c::CatPacket) = return get_dictionary(getfield(c,:parent).datablock)
 Base.propertynames(c::CatPacket,private::Bool=false) = propertynames(getfield(c,:dfr))
 
 # We simply iterate over the data loop, but keep a track of the

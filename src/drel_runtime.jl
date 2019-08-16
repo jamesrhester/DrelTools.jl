@@ -25,6 +25,10 @@ Base.:(+)(y::String,z::String) = y*z
 struct drelvector <: AbstractVector{Number}
     elements::Array{Number,1}
 end
+# Create a drelvector from a row vector
+drelvector(a::Array{Number,2}) = begin
+    drelvector(vec(a))
+end
 
 # postmultiply: no transpose necessary
 Base.:(*)(a::Array,b::drelvector) = begin
@@ -35,7 +39,7 @@ Base.:(*)(a::Array,b::drelvector) = begin
 end
 
 # premultiply: transpose first
-Base.:(*)(a::drelvector,b::Array) = drelvector(transpose(a) * b)
+Base.:(*)(a::drelvector,b::Array) = drelvector(permutedims(a.elements) * b)
 
 # join multiply: dot product
 Base.:(*)(a::drelvector,b::drelvector) = dot(a.elements,b.elements)

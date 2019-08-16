@@ -245,13 +245,17 @@ Matrix if the dictionary type is Matrix or Array.  This is in
 keeping with dREL rules. Nothing else defined in the dictionary
 can be assigned in a dREL method, and all other uses must be
 explicit as to whether a matrix is being used.
+
+To enable use in discovering the target in definition methods,
+we return any names found.
 ==#
 
 find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
+    found_target = nothing
     ixpr = :(:call,:f)  #dummy
     if typeof(ast_node) == Expr && ast_node.head == :(=)
         ixpr.head = ast_node.head
-        ixpr.args[1] = find_target(ast_node.args[1],alias_name,target_obj)
+        found_target,ixpr.args[1] = find_target(ast_node.args[1],alias_name,target_obj)
         if ixpr.args[1] == :__dreltarget && is_matrix
             if typeof(ast_node.args[2]) == Expr && ast_node.args[2].head == :vect
                 println("Fixing implicit matrix assignment")
@@ -262,25 +266,32 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
         else
             ixpr.args[2] = ast_node.args[2]  #no target on RHS
         end
-        return ixpr
+        return found_target,ixpr
     elseif typeof(ast_node) == Expr && (ast_node.head == :ref ||
                                         ast_node.head == :(.))
         if ast_node.args[1] == Symbol(alias_name)
             println("Found potential target! $ast_node for alias $alias_name.$target_obj")
             if typeof(ast_node.args[2]) == QuoteNode && ast_node.args[2].value == Symbol(lowercase(target_obj)) 
-                return :__dreltarget
+                return (alias_name,target_obj),:__dreltarget
             else
-                return ast_node
+                return found_target,ast_node
             end
         else
-            return ast_node
+            return found_target,ast_node
         end
     elseif typeof(ast_node) == Expr
         ixpr.head = ast_node.head
-        ixpr.args = [find_target(x,alias_name,target_obj,is_matrix=is_matrix) for x in ast_node.args]
-        return ixpr
+        argresult = [find_target(x,alias_name,target_obj,is_matrix=is_matrix) for x in ast_node.args]
+        ixpr.args = [a[2] for a in argresult]
+        found_target = [a[1] for a in argresult if a[1] != nothing]
+        if length(found_target)==1
+            found_target = found_target[1]
+        else
+            found_target = nothing
+        end
+        return found_target,ixpr
     else
-        return ast_node
+        return found_target,ast_node
     end
 end
 
