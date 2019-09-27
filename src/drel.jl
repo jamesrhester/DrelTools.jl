@@ -20,6 +20,9 @@ struct CategoryObject
     have_vals
 end
 
+## Our category object needs to present any child categories as if
+## they were part of a single loop
+
 CategoryObject(data::cif_container_with_dict,catname) = begin
     cifdic = get_dictionary(data)
     raw_data = get_typed_datablock(data)
@@ -38,19 +41,54 @@ CategoryObject(data::cif_container_with_dict,catname) = begin
     if !is_looped && size(actual_data,2) == 0  #no packets in a set category
         actual_data[!,gensym()] = [missing]
     end
-    CategoryObject(data,catname,object_names,data_names,actual_data,internal_object_names,
-        name_to_object,object_to_name,key_names,is_looped,have_vals)
+    parent = CategoryObject(data,catname,object_names,data_names,actual_data,internal_object_names,
+                                 name_to_object,object_to_name,key_names,is_looped,have_vals)
+    for one_child in get_child_categories(cifdic,catname)
+        parent = merge(parent,CategoryObject(data,one_child))
+    end
+    return parent
 end
 
-# Allow access using a dictionary of object names. It is possible
-# that a single key dataname does not exist, in which case it
-# can be created arbitrarily.
+# Merge category objects. This is how we get the child objects to appear as
+# a single category.
+
+Base.merge(left::CategoryObject,right::CategoryObject) = begin
+    if left.datablock != right.datablock
+        error("Cannot merge categories with different data")
+    end
+    object_names = vcat(left.object_names,right.object_names)
+    internal_object_names = vcat(left.internal_object_names,right.internal_object_names)
+    data_names = vcat(left.data_names,right.data_names)
+    name_to_object = merge(left.name_to_object,right.name_to_object)
+    object_to_name = merge(left.object_to_name,right.object_to_name)
+    key_names = left.key_names
+    is_looped = left.is_looped
+    have_vals = vcat(left.have_vals,right.have_vals)
+    # Match up the keys
+    cifdic = get_dictionary(left.datablock)
+    right_keynames = cifdic[right.catname]["_category_key.name"]
+    left_keynames = [cifdic[r]["_name.linked_item_id"][1] for r in right_keynames]
+    # turn them into object names
+    right_keynames = [Symbol(right.name_to_object[r]) for r in right_keynames]
+    left_keynames = [Symbol(left.name_to_object[l]) for l in left_keynames]
+    # The data frame is a left outer join
+    data_frame = join(left.data_frame,right.data_frame,kind=:left,
+                      on = collect(zip(left_keynames,right_keynames)))
+    CategoryObject(left.datablock,left.catname,object_names,data_names,
+                   data_frame,internal_object_names,name_to_object,
+                   object_to_name,key_names,is_looped,have_vals)
+end
+
+# Find a packet using a dictionary of object - value pairs.
+# If a single dataname key does not exist, it
+# will be created arbitrarily.
 
 Base.getindex(c::CategoryObject,keydict::Dict) = begin
     pack = c.data_frame
     println("Loop is $pack")
     # Try to create missing key data values - only
-    # possible if there is a single key
+    # possible if there is a single key and no
+    # children
     if length(keydict) == 1
         keyobj = collect(keys(keydict))[1]
         if !(Symbol(keyobj) in names(pack))
@@ -72,6 +110,7 @@ end
 
 # If a single value is provided, we can turn this into a keyed
 # access using the single unique key
+
 Base.getindex(c::CategoryObject, x::Union{String,Array{Any},Number}) = begin
     if length(c.key_names) == 1
         return c[Dict(c.key_names[1]=>x)]
@@ -81,21 +120,35 @@ Base.getindex(c::CategoryObject, x::Union{String,Array{Any},Number}) = begin
 end
 
 Base.length(c::CategoryObject) = size(c.data_frame,1)
-get_dictionary(c::CategoryObject) = get_dictionary(c.datablock)
-get_datablock(c::CategoryObject) = get_datablock(c.datablock)
+CrystalInfoFramework.get_dictionary(c::CategoryObject) = get_dictionary(c.datablock)
+CrystalInfoFramework.get_datablock(c::CategoryObject) = get_datablock(c.datablock)
+
+#=========
+
+CatPackets
+
+=========#
 
 # We can't use a dataframerow by itself as we need to know the
 # category name for use in deriving missing parts of the packet
-# We store the parent as a source for derivation information
+# We store the datablock and dictionary as these can be used
+# for internal derivation. The category object itself is less
+# useful, we think...
 
 struct CatPacket
     dfr::DataFrameRow
     name::String
-    parent::CategoryObject
+    datablock
+    dictionary
+end
+
+CatPacket(dfr,name,c::CategoryObject) = begin
+    CatPacket(dfr,name,c.datablock,get_dictionary(c.datablock))
 end
 
 get_name(c::CatPacket) = return getfield(c,:name)
-get_dictionary(c::CatPacket) = return get_dictionary(getfield(c,:parent).datablock)
+CrystalInfoFramework.get_dictionary(c::CatPacket) = return getfield(c,:dictionary)
+CrystalInfoFramework.get_datablock(c::CatPacket) = return getfield(c,:datablock)
 Base.propertynames(c::CatPacket,private::Bool=false) = propertynames(getfield(c,:dfr))
 
 # We simply iterate over the data loop, but keep a track of the

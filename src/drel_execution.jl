@@ -213,7 +213,7 @@ end
 # For a single row in a packet
 CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
     dict = get_dictionary(cp)
-    block = getfield(cp,:parent).datablock
+    block = get_datablock(cp)
     mycat = get_name(cp)
     dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
     def_val = CrystalInfoFramework.get_default(dict,dataname)
@@ -238,7 +238,7 @@ Base.getproperty(cp::CatPacket,obj::Symbol) = begin
     catch KeyError
         #println("$(getfield(cp,:dfr)) has no member $obj:deriving...")
         # get the parent container with dictionary
-        db = getfield(cp,:parent).datablock
+        db = get_datablock(cp)
         m = derive(db,get_name(cp),String(obj),cp)
         if ismissing(m)
             m = CrystalInfoFramework.get_default(cp,obj)
