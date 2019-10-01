@@ -220,6 +220,11 @@ CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
     if !ismissing(def_val)
         return def_val
     end
+    # Try using enumeration default instead
+    def_val = lookup_default(dict,dataname,cp)
+    if !ismissing(def_val)
+        return def_val
+    end
     if !haskey(dict.def_meths,(dataname,"_enumeration.default"))
         add_definition_func!(dict,dataname)
     end
@@ -317,3 +322,28 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
         set_func!(d,s,att_name,r,eval(r))
     end
 end
+
+#==   Lookup 
+
+A default value may be tabulated, and some other value in the
+current packet is used to index into the table
+
+==#
+
+lookup_default(dict,dataname,cp) = begin
+    index_name = get(dict[dataname],"_enumeration.def_index_id",[missing])[1]
+    if ismissing(index_name) return missing
+    end
+    object_name = dict[index_name]["_name.object_id"][1]
+    current_val = getproperty(cp,Symbol(object_name))
+    print("Indexing $dataname using $current_val to get")
+    # Now index into the information
+    indexlist = dict[dataname]["_enumeration_default.index"]
+    pos = indexin([current_val],indexlist)
+    if pos[1] == nothing return missing end
+    as_string = dict[dataname]["_enumeration_default.value"][pos[1]]
+    println(" $as_string")
+    return get_julia_type(dict,dataname,[as_string])[1]
+end
+
+
