@@ -42,19 +42,24 @@ CategoryObject(data::cif_container_with_dict,catname) = begin
         actual_data[!,gensym()] = [missing]
     end
     parent = CategoryObject(data,catname,object_names,data_names,actual_data,internal_object_names,
-                                 name_to_object,object_to_name,key_names,is_looped,have_vals)
-    for one_child in get_child_categories(cifdic,catname)
-        parent = merge(parent,CategoryObject(data,one_child))
+                            name_to_object,object_to_name,key_names,is_looped,have_vals)
+    if is_looped
+        for one_child in get_child_categories(cifdic,catname)
+            parent = merge(parent,CategoryObject(data,one_child))
+        end
     end
     return parent
 end
 
 # Merge category objects. This is how we get the child objects to appear as
-# a single category.
+# a single category. Merging only makes sense if both categories are Looped.
 
 Base.merge(left::CategoryObject,right::CategoryObject) = begin
     if left.datablock != right.datablock
         error("Cannot merge categories with different data")
+    end
+    if !(left.is_looped && right.is_looped)
+        error("Cannot merge a Loop and Set category ($(left.catname)/$(right.catname))")
     end
     object_names = vcat(left.object_names,right.object_names)
     internal_object_names = vcat(left.internal_object_names,right.internal_object_names)

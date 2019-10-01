@@ -223,7 +223,11 @@ CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
     if !haskey(dict.def_meths,(dataname,"_enumeration.default"))
         add_definition_func!(dict,dataname)
     end
-    func_code = get_def_meth(d,s,"enumeration.default")
+    func_code = get_def_meth(dict,dataname,"enumeration.default")
+    debug_info = get_def_meth_txt(dict,dataname,"enumeration.default")
+    println("==== Invoking default function for $dataname ===")
+    println("Stored code:")
+    println(debug_info)
     return Base.invokelatest(func_code,block,cp)
 end
 
