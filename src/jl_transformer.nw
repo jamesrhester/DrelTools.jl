@@ -343,7 +343,10 @@ Julia, bless its cotton socks, indexes from 1. We rely on a Julia
 macro provided with CrystalInfoFramework to insert index corrections in the
 appropriate places. Also, the second element in a three-element
 slice is the step, unlike Python or dREL, for which it is the end, so
-we swap things around below.
+we swap things around below. We also do not include the default step
+size (of 1) as this changed the type when iterating over CaselessStrings -
+a beginning and end gave a Substring, whereas with the step it became
+a String.
 
 TODO Julia: row/column major indexing...do we need to swap stuff?
     
@@ -358,7 +361,10 @@ def slicing(self,args):
 
 def proper_slice(self,args):
     step = args[0].get("step","1")
-    return args[0]["start"]+":"+step+":"+args[0]["stop"]
+    retval = args[0]["start"]+":"
+    if step != "1":
+        retval = retval + step + ":"
+    return retval+args[0]["stop"]
 
 def short_slice(self,args):
     if len(args)==1: # a colon
@@ -470,7 +476,9 @@ def else_if_stmt(self,args):
 Functions.  A function call may invoke a built-in function, so we have
 to convert these to known python functions. However, list/array construction
 in Julia is accomplished simply by using square brackets, so we special-case
-these functions.
+these functions. Also, as Julia has multiple dispatch, we don't need to
+annotate type as a new function will be compiled for each type set
+encountered.
 
 <<Functions>>=
 def call(self,args):
@@ -504,9 +512,9 @@ def arglist(self,args):
     return _concat(args)
 
 def one_arg(self,args):
-    # annotate where we can
-    annot = get_type_annotation(args[2],args[1])
-    return args[0]+"::"+annot
+    # do no annotations
+    # annot = get_type_annotation(args[2],args[1])
+    return args[0] #  +"::"+annot
 
 @
 Utility functions
@@ -565,7 +573,7 @@ this mean for Julia??
 def get_function_name(in_name):
     """Return the Julia name of the dREL function, an argument prefix,
        and anything to be appended to the end"""
-    builtins = {"table":"Dict",
+    builtins = {"table":"Dict{String,Any}",
                 "len":"length",
                 "abs":"abs",
                 "magn":"abs",
@@ -587,7 +595,8 @@ def get_function_name(in_name):
       "acosd":"acosd",
       "atand":"atand",
                 "mod":"mod.",
-                "repr":"string"
+                "repr":"string",
+      "transpose":"permutedims"
     }
     test_name = in_name.lower()
     target_name = builtins.get(test_name,None)
@@ -601,10 +610,8 @@ def get_function_name(in_name):
         return "floor.","Int64,",""
     if test_name == "upper":
         return "","",".upper()"
-    if test_name == "transpose":
-        return "","",".T"
     if test_name == 'expimag':
-        return "cmath.exp","1j*(",")"
+        return "exp","1im*(",")"
     if test_name in ['real','imag']:
         return "","","." + test_name
     if test_name == 'sort':
@@ -636,6 +643,10 @@ def fix_mathops(op,first_arg,second_arg):
 In Julia we can annotate type after any variable. This type is then used to
 search for an appropriate 'convert' function. So by annotating type, we can
 get Cif values turned into numbers etc. without doing this explicitly.
+
+Note that 'convert' is only called in particular situations, most obviously
+function argument types are never 'converted' - that is what multiple
+despatch was for.
 
 <<Type annotations>>=
 def get_type_annotation(ddl_type,ddl_container):

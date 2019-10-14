@@ -148,14 +148,22 @@ ast_construct_type(ast_node,cifdic,cat,obj) = begin
     end
 end
     
-#== dREL uses 0-based indexing, but Julia uses 1-based indexing. We trawl through
+#== 
+
+dREL uses 0-based indexing, but Julia uses 1-based indexing. We trawl through
 the AST to find any index-type expressions. While this macro is similar to the one that assigns
 types, we keep it separate for maintainability.  ``In_scope_list`` should contain
 a list of variable names that are in scope as category names or packets. We do
 not touch slices, as are assumed to have been caught earlier.
 
 If we find a category[object] reference where ``object`` is not a dictionary,
-when convert it to a dictionary of form category_key => object ==#
+when convert it to a dictionary of form category_key => object.
+
+This is further complicated by the problem that tables are referenced exactly like
+dictionaries, so we must catch literal creation (checking for :Dict at the moment)
+and references to dictionary items that are defined to be Table type. 
+
+==#
 
 ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = begin
     #println("$ast_node: in scope $in_scope_list")
@@ -177,10 +185,10 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
                 push!(in_scope_list, String(lhs))
             end
             return ast_node
-        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] == :CategoryObject
+        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] in (:CategoryObject,:(Dict{String,Any}))
             push!(in_scope_list,String(lhs))
             return ast_node
-        elseif  ast_node.head in [:for]
+        elseif ast_node.head in [:for]
             new_scope_list = deepcopy(in_scope_list)
             println("New scope!")
             ixpr.head = ast_node.head
@@ -204,7 +212,7 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
             # The logic here: if the subject of the subscription is a known category object,
-            # then do not add one. Otherwise, it must be a plain old array dereference, and
+            # then do not + 1. Otherwise, it must be a plain old array dereference, and
             # one should be added. If the subject of the subscription is itself an
             # expression, then we must have a category dereference and can ignore it.
             if typeof(ast_node.args[1])!= Expr && !(String(ast_node.args[1]) in in_scope_list)
@@ -224,7 +232,7 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
                 #ixpr.args[2] = :(Dict($keyname=>$(ixpr.args[2])))
             end
             return ixpr
-        else 
+        else          
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
             return ixpr

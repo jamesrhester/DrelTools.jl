@@ -105,7 +105,7 @@ Base.getindex(c::CategoryObject,keydict::Dict) = begin
     for pr in keydict
         k,v = pr
         println("Testing for $k == $v")
-        pack = pack[ pack[Symbol(k)] .== v,:]
+        pack = pack[ pack[!,Symbol(k)] .== v,:]
     end
     if size(pack,1) != 1
         error("$keydict does not identify a unique row")
@@ -116,7 +116,7 @@ end
 # If a single value is provided, we can turn this into a keyed
 # access using the single unique key
 
-Base.getindex(c::CategoryObject, x::Union{String,Array{Any},Number}) = begin
+Base.getindex(c::CategoryObject, x::Union{SubString,String,Array{Any},Number}) = begin
     if length(c.key_names) == 1
         return c[Dict(c.key_names[1]=>x)]
     else throw(KeyError(x))
