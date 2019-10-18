@@ -1,7 +1,7 @@
 #== This module defines functions for executing dREL code ==#
 
 export dynamic_block, define_dict_funcs, derive, get_func_text
-export add_definition_func
+export add_definition_func, empty_cache!
 
 # Python setup calls
 
@@ -141,30 +141,65 @@ end
 
 A dynamic block, in addition to knowing types and default values, will also
 actively seek to derive missing information, including calculation of
-default values.
+default values.  These values are cached for efficiency and appear as if
+they were present in the original file after they have been calculated once.
+To remove these values, the cache should be emptied.
 
 ==#
 
 struct dynamic_block <: cif_container_with_dict
     block::cif_block_with_dict
+    value_cache::Dict{String,Any}
 end
+
+dynamic_block(cbwd::cif_block_with_dict) = dynamic_block(cbwd,Dict{String,Any}())
+
+empty_cache!(d::dynamic_block) = empty!(d.value_cache)
+
+cache_value!(d::dynamic_block,name,value) = begin
+    if haskey(d.value_cache,name)
+        println("WARNING: overwriting previously cached value")
+        println("Was: $(d.value_cache[name])")
+        println("Now: $value")
+    end
+    d.value_cache[name] = value
+end
+
+cache_value!(d::dynamic_block,name,index,value) = d.value_cache[name][index] = value
 
 CrystalInfoFramework.get_dictionary(d::dynamic_block) = get_dictionary(d.block)
 CrystalInfoFramework.get_datablock(d::dynamic_block) = get_datablock(d.block)
-CrystalInfoFramework.get_typed_datablock(d::dynamic_block) = d.block
+CrystalInfoFramework.get_typed_datablock(d::dynamic_block) = d
 
 Base.getindex(d::dynamic_block,s::String) = begin
     try
         q = d.block[s]
     catch KeyError
+        if haskey(d.value_cache,lowercase(s))
+            println("Returning cached value for $s")
+            return d.value_cache[lowercase(s)]
+        end
         m = derive(d,s)
         accept = any(x->!ismissing(x),m)
         if !accept
             m = CrystalInfoFramework.get_default(d,s)
         end
-        m
+        cache_value!(d,lowercase(s), m)
+        return m
     end
 end
+
+Base.keys(d::dynamic_block) = begin
+    real_keys = keys(get_datablock(d))
+    cache_keys = keys(d.value_cache)
+    return union(real_keys,cache_keys)
+end
+
+# While the original get_loop is almost perfect for our uses, it
+# will call getindex and therefore start deriving missing data names
+# if the data file explicitly contains missing values.
+#
+# CrystalInfoFramework.get_loop(d::dynamic_block,s::String) = begin
 
 # This method actively tries to derive default values
 CrystalInfoFramework.get_default(d::dynamic_block,s::String) = begin
@@ -197,8 +232,11 @@ derive(d::dynamic_block,s::String) = begin
     [Base.invokelatest(func_code,d,p) for p in target_loop]
 end
 
-#==This is called from within a dREL method when an item is
-found missing from a packet==#
+#== Per packet derivation
+
+This is called from within a dREL method when an item is
+found missing from a packet.
+==#
 
 derive(d::dynamic_block,cat::String,obj::String,p::CatPacket) = begin
     dict = get_dictionary(d)
@@ -238,22 +276,41 @@ end
 
 
 #== We redefine getproperty to allow derivation inside category
-packets.
+packets.  If the property is missing, we populate the original
+data frame with a column of 'missing' values, so that each 
+subsequent packet can set the particular value it refers to.
 ==#
 
 Base.getproperty(cp::CatPacket,obj::Symbol) = begin
+    raw_table = parent(getfield(cp,:dfr))
+    result = missing
     try
-        return getproperty(getfield(cp,:dfr),obj)
+        result = getproperty(getfield(cp,:dfr),obj)
     catch KeyError
-        #println("$(getfield(cp,:dfr)) has no member $obj:deriving...")
-        # get the parent container with dictionary
-        db = get_datablock(cp)
-        m = derive(db,get_name(cp),String(obj),cp)
-        if ismissing(m)
-            m = CrystalInfoFramework.get_default(cp,obj)
-        end
-        m
+        # populate the column with 'missing' values
+        full_length = size(raw_table,1)
+        println("$obj is missing, adding $full_length missing values")
+        # explicitly set type otherwise DataFrames thinks it is Missing only
+        new_array = Array{Union{Missing,Any},1}(missing,full_length)
+        d = get_datablock(cp)
+        setproperty!(raw_table,obj, new_array)
     end
+    if !ismissing(result)
+        return result
+    end
+    #println("$(getfield(cp,:dfr)) has no member $obj:deriving...")
+    # So we have to derive
+    # get the parent container with dictionary
+    db = get_datablock(cp)
+    m = derive(db,get_name(cp),String(obj),cp)
+    if ismissing(m)
+        m = CrystalInfoFramework.get_default(cp,obj)
+    end
+    # store the cached value
+    row_no = parentindices(getfield(cp,:dfr))[1]
+    raw_table[row_no,obj] = m
+    println("All values for $obj: $(raw_table[!,obj])")
+    return m
 end
 
 add_new_func(d::abstract_cif_dictionary,s::String) = begin

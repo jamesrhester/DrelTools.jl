@@ -120,3 +120,10 @@ loop_
     C2A H2A . . 0.9800 n
     C3A C4A . . 1.533(4) n
     C3A H3A1 . . 0.9700 n
+
+# inserted by JRH; should be able to calculate a default
+# based on presence of other items??
+_diffrn_radiation.probe                x-ray
+# inserted by JRH; there is no way to figure out a
+# sensible default here
+_reflns.apply_dispersion_to_Fcalc       Yes

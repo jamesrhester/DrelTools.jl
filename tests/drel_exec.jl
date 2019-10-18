@@ -52,3 +52,8 @@ end
     println("$(code_typed(get_func(get_dictionary(db),"_atom_site.tensor_beta"),(dynamic_block,CatPacket)))")
     true
 end
+
+@testset "Test F_complex" begin
+    t = db["_refln.F_complex"]
+    true
+end
