@@ -42,7 +42,7 @@ end
     @test f(2) == 1
     #Now test that we properly process matrices
     rawtext = :(a.label = [[1,2,3],[4,5,6]]; return a.label)
-    newtext = find_target(rawtext,"a","label";is_matrix=true)
+    target,newtext = find_target(rawtext,"a","label";is_matrix=true)
     println("$newtext")
     @test eval(newtext) == [[1 2 3];[4 5 6]]
 end

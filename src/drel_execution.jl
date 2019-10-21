@@ -237,7 +237,7 @@ end
 This is called from within a dREL method when an item is
 found missing from a packet.
 ==#
-
+    
 derive(d::dynamic_block,cat::String,obj::String,p::CatPacket) = begin
     dict = get_dictionary(d)
     dataname = get_by_cat_obj(dict,(cat,obj))["_definition.id"][1]
@@ -402,5 +402,3 @@ lookup_default(dict,dataname,cp) = begin
     println(" $as_string")
     return get_julia_type(dict,dataname,[as_string])[1]
 end
-
-

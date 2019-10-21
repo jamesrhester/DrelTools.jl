@@ -53,7 +53,7 @@ end
     true
 end
 
-@testset "Test F_complex" begin
-    t = db["_refln.F_complex"]
-    true
+@testset "Test F_calc" begin
+    t = db["_refln.F_calc"]
+    @test isapprox(t,[23.993,32.058,6.604],atol=0.01)
 end
