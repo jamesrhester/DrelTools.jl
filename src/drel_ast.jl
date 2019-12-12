@@ -50,8 +50,8 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             ixpr.args = [ast_assign_types(x,in_scope_dict,lhs=lh,cifdic=cifdic,all_cats=all_cats) for x in ast_node.args]
             return ixpr
         elseif lhs != nothing && ast_node.head == :(::)
-            if ast_node.args[2] == :CategoryObject
-                in_scope_dict[lhs] = ast_node.args[1]
+            if ast_node.args[2] in(:CategoryObject,:CatPacket)
+                in_scope_dict[lhs] = String(ast_node.args[1])
             end
             ixpr.head = ast_node.head
             ixpr.args = ast_node.args
@@ -361,7 +361,8 @@ end
 Set category packets can be referenced directly without any looping
 statement. Our transformer creates a category object for every category
 mentioned, but does not know about Set categories. We do, and so we
-catch the CategoryObject creation and create a CatPacket.
+catch the CategoryObject creation and create a CatPacket. We must change
+the type of any subsequent assignments.
 
 NB: nested CategoryObject calls will fail. Should not exist. ==#
 
@@ -373,6 +374,15 @@ cat_to_packet(ast_node,set_cats) = begin
             ixpr = :(first_packet($ast_node))
         else
             ixpr.args = [cat_to_packet(x,set_cats) for x in ast_node.args]
+        end
+    elseif typeof(ast_node) == Expr && ast_node.head == :(::)
+        ixpr.head = ast_node.head
+        #println("$(ast_node.args[2]),$(ast_node.args[1])")
+        if ast_node.args[2] == :CategoryObject && String(ast_node.args[1]) in set_cats
+            #println("Bazinga!")
+            ixpr.args = [ast_node.args[1],:CatPacket]
+        else
+            ixpr.args = ast_node.args
         end
     elseif typeof(ast_node) == Expr
         ixpr.head = ast_node.head

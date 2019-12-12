@@ -69,7 +69,7 @@ CategoryObject(data::cif_container_with_dict,catname) = begin
     end
     actual_data = get_loop(raw_data,data_names[1])
     if !is_looped && size(actual_data,2) == 0  #no packets in a set category
-        actual_data[!,gensym()] = [missing]
+        actual_data[!,:dummy] = [missing]
     end
     parent = CategoryObject(data,catname,object_names,data_names,actual_data,internal_object_names,
                             name_to_object,object_to_name,key_names,is_looped,have_vals)
@@ -164,9 +164,9 @@ CrystalInfoFramework.get_datablock(c::CategoryObject) = get_datablock(c.databloc
 # to create category objects.
 
 update_cache(c::CategoryObject) = begin
-    cols = names(c.data_frame)
-    #println("All data frame names: $cols")
-    #println("Lookup: $(c.object_to_name)")
+    cols = setdiff(Set(names(c.data_frame)),[:dummy])
+    println("All data frame names: $cols")
+    println("Lookup: $(c.object_to_name)")
     full_names = zip(cols,[c.object_to_name[String(col)] for col in cols])
     new_names = filter(n -> !(n[2] in lowercase.(keys(c.datablock))),collect(full_names))
     map(n -> cache_value!(c.datablock,n[2],getproperty(c.data_frame,n[1])),new_names)
