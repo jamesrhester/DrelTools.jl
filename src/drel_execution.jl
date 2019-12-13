@@ -3,20 +3,6 @@
 export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
 
-# Python setup calls
-
-using PyCall
-
-lark = PyNULL()
-jl_transformer = PyNULL()
-
-# Done this way to allow precompilation to work
-__init__() = begin
-    pushfirst!(PyVector(pyimport("sys")["path"]),@__DIR__)
-    copy!(lark,pyimport("lark"))
-    copy!(jl_transformer,pyimport("jl_transformer"))
-end
-
 # Configuration
 const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
 
@@ -24,41 +10,16 @@ const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
 
 lark_grammar() = begin
     grammar_text = read(joinpath(@__DIR__,drel_grammar),String)
-    parser = lark.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
+    parser = Lerche.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
 end
 
 # Parse and output proto-Julia code using Python Lark. We cannot pass complex
 # objects to Python, so we extract the needed information here.
 
 lark_transformer(dname,dict,all_funcs,cat_list,func_cat) = begin
-    # extract information to pass to python
+    # 
     println("Now preparing dREL transformer for $dname (functions in $func_cat)")
-    target_cat = dict[dname]["_name.category_id"][1]
-    target_obj = dict[dname]["_name.object_id"][1]
-    is_func = false
-    if lowercase(target_cat) == func_cat
-        is_func = true
-    end
-    tt = jl_transformer.TreeToPy(dname,target_cat,target_obj,cat_list,is_func=is_func,func_list=all_funcs)
-end
-
-#== Functions defined in the dictionary are detected and adjusted while parsing. 
-==#
-
-get_cat_names(dict::abstract_cif_dictionary) = begin
-    catlist = [a for a in keys(dict) if get(dict[a],"_definition.scope",["Item"])[1] == "Category"]
-end
-
-get_dict_funcs(dict::abstract_cif_dictionary) = begin
-    func_cat = [a for a in keys(dict) if get(dict[a],"_definition.class",["Datum"])[1] == "Functions"]
-    if length(func_cat) > 0
-        func_catname = lowercase(dict[func_cat[1]]["_name.object_id"][1])
-        all_funcs = [a for a in keys(dict) if lowercase(dict[a]["_name.category_id"][1]) == func_catname]
-        all_funcs = lowercase.([dict[a]["_name.object_id"][1] for a in all_funcs])
-    else
-        all_funcs = []
-    end
-    return func_catname,all_funcs
+    tt = TreeToJulia(dname,dict)
 end
 
 get_drel_methods(cd::abstract_cif_dictionary) = begin
@@ -81,11 +42,8 @@ end
 ==#
 
 make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary,parser) = begin
-    func_cat,all_funcs = get_dict_funcs(dict)
-    cat_names = get_cat_names(dict)
-    target_cat = find_category(dict,dataname)
     tree = parser.parse(drel_text)
-    transformer = lark_transformer(dataname,dict,all_funcs,cat_names,func_cat)
+    transformer = TreeToJulia(dataname,dict)
     tc_aliases,proto = transformer.transform(tree)
     println("Proto-Julia code: ")
     println(proto)

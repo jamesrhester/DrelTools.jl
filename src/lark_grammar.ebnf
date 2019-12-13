@@ -1,4 +1,4 @@
-//# Number of braces found 9
+//# Number of braces found 8
 //# Number of braces found 0
 //# power found 1 times using ^[ ]*(power)
 //# primary found 1 times using ^[ ]*(primary)
@@ -52,7 +52,7 @@
     MISSING : "?"
     NULL : "NULL"
     
-    real : ((INTEGER "." (INTEGER)*)|("." INTEGER))[("E"|"e"i) ["+"|"-"] INTEGER ]
+    real : ((INTEGER PERIOD [INTEGER])|(PERIOD INTEGER))[("E"|"e"i) [PLUS|MINUS] INTEGER ]
     
     imaginary : (real | INTEGER) ("j"i|"J")
     LONGSTRING : /'''[^\\][.\n]*'''|"""[^\\][.\n]*"""/
@@ -87,7 +87,7 @@
     enclosure : parenth_form | list_display | table_display 
     parenth_form : LEFTPAREN expression_list RIGHTPAREN 
     
-    list_display : LSQUAREB  expression_list RSQUAREB 
+    list_display : LSQUAREB  [ expression_list ] RSQUAREB 
     expression_list : expression ( COMMA expression )* 
     
     table_display : LEFTBRACE  table_contents RIGHTBRACE 

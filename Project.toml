@@ -6,4 +6,4 @@ version = "0.1.0"
 [deps]
 CrystalInfoFramework = "6007d9b0-c6b2-11e8-0510-1d10e825f3f1"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+Lerche = "d42ef402-04e6-4356-9f73-091573ea58dc"

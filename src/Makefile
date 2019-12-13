@@ -1,8 +1,4 @@
-ALL: jl_transformer.py 
+ALL: lark-grammar.ebnf 
 
-%.py: %.nw
-	notangle $< > $@
-#
-validation_builtins.jl: jl_transformer.nw
-	notangle -RValidation_functions $< > $@
-#
+lark-grammar.ebnf:  annotated-grammar.rst
+	egrep '^ {4,}' $< | ./ebnf_to_lark.py > lark_grammar.ebnf
