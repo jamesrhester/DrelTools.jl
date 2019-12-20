@@ -8,7 +8,7 @@ prepare_system() = begin
     u = NativeCif(joinpath(@__DIR__,"AgCrS2.mcif"))
     ud = assign_dictionary(u["AgCrS2_OG"],t)
 end
-
+#==
 @testset "Testing CategoryObject functionality" begin
     ud = prepare_system()
     c = CategoryObject(ud,"atom_site_moment")
@@ -46,5 +46,5 @@ end
     println("$newtext")
     @test eval(newtext) == [[1 2 3];[4 5 6]]
 end
-
+==#
 include("./drel_exec.jl")

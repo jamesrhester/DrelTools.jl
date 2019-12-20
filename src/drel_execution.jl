@@ -1,26 +1,24 @@
 #== This module defines functions for executing dREL code ==#
-
 export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
+
+println("Rule dict at compile time: $(get_rule_dict())")
 
 # Configuration
 const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
 
-# Create a parser for the dREL grammar
+# Create a parser for the dREL grammar. It needs to be contextual
+# due to such issues as an isolated variable "j" being parsed as the
+# signifier for an imaginary number.
 
 lark_grammar() = begin
     grammar_text = read(joinpath(@__DIR__,drel_grammar),String)
-    parser = Lerche.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
+    Lerche.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
 end
 
-# Parse and output proto-Julia code using Python Lark. We cannot pass complex
-# objects to Python, so we extract the needed information here.
+const drel_parser = lark_grammar()
 
-lark_transformer(dname,dict,all_funcs,cat_list,func_cat) = begin
-    # 
-    println("Now preparing dREL transformer for $dname (functions in $func_cat)")
-    tt = TreeToJulia(dname,dict)
-end
+# Parse and output proto-Julia code using Lerche
 
 get_drel_methods(cd::abstract_cif_dictionary) = begin
     has_meth = [n for n in cd if "_method.expression" in keys(n) && get(n,"_definition.scope",["Item"])[1] != "Category"]
@@ -33,7 +31,7 @@ end
 (1) parsing the drel text into a parse tree
 (2) traversing the parse tree with a transformer that has been prepared
     with the crucial information to output syntactically-correct Julia code
-(3) parsing the returned Julia code into an expression
+(3) --blank--
 (4) adjusting indices to 1-based
 (5) changing any aliases of the main category back to the category name
 (6) making sure that all loop-local variables are defined at the entry level
@@ -42,18 +40,20 @@ end
 ==#
 
 make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary,parser) = begin
-    tree = parser.parse(drel_text)
+    tree = Lerche.parse(drel_parser,drel_text)
+    println("Rule dict: $(get_rule_dict())")
     transformer = TreeToJulia(dataname,dict)
-    tc_aliases,proto = transformer.transform(tree)
+    proto = transform(transformer,tree)
+    tc_alias = transformer.target_category_alias
     println("Proto-Julia code: ")
     println(proto)
     set_categories = get_set_categories(dict)
-    parsed = ast_fix_indexing(Meta.parse(proto),get_categories(dict),dict)
+    parsed = ast_fix_indexing(proto,get_categories(dict),dict)
     println(parsed)
     # catch implicit matrix assignments
     container_type = dict[dataname]["_type.container"][1]
     is_matrix = (container_type == "Matrix" || container_type == "Array")
-    ft,parsed = find_target(parsed,tc_aliases,transformer[:target_object];is_matrix=is_matrix)
+    ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
     if ft == nothing
         println("Warning: no target identified for $dataname")
     end
@@ -61,7 +61,7 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     parsed = fix_scope(parsed)
     parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     println("####\n    Assigning types\n####\n")
-    parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>target_cat),cifdic=dict,set_cats=set_categories,all_cats=get_categories(dict))
+    parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats=get_categories(dict))
 end
 
 #== Extract the dREL text from the dictionary, if any
@@ -80,7 +80,7 @@ end
 define_dict_funcs(c::abstract_cif_dictionary) = begin
     #Parse and evaluate all dictionary-defined functions and store
     func_cat,all_funcs = get_dict_funcs(c)
-    parser = lark_grammar()
+    #parser = lark_grammar()
     for f in all_funcs
         println("Now processing $f")         
         full_def = get_by_cat_obj(c,(func_cat,f))
@@ -89,7 +89,7 @@ define_dict_funcs(c::abstract_cif_dictionary) = begin
         func_text = get_loop(full_def,"_method.expression")
         func_text = func_text[Symbol("_method.expression")][1]
         println("Function text: $func_text")
-        result = make_julia_code(func_text,entry_name,c,parser)
+        result = make_julia_code(func_text,entry_name,c,drel_parser)
         println("Transformed text: $result")
         set_func!(c,full_name,result,eval(result))  #store in dictionary
     end
@@ -275,7 +275,7 @@ add_new_func(d::abstract_cif_dictionary,s::String) = begin
     t = get_func_text(d,s,"Evaluation")
     if t != ""
         parser = lark_grammar()
-        r = make_julia_code(t,s,d,parser)
+        r = make_julia_code(t,s,d,drel_parser)
     else
         r = Meta.parse("(a,b) -> missing")
     end
@@ -322,7 +322,7 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
     t = get_func_text(d,s,"Definition")
     if t != ""
         parser = lark_grammar()
-        r = make_julia_code(t,s,d,parser)
+        r = make_julia_code(t,s,d,drel_parser)
         att_name = "not found"
         for (a,targ) in all_set_ddlm
             ft,r = find_target(r,a,targ)

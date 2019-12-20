@@ -50,7 +50,7 @@
     HEXINT : /0x[0-9A-Fa-f]+/
     BININT : /0b[0-1]+/
     MISSING : "?"
-    NULL : "NULL"
+    NULL : "null"i
     
     real : ((INTEGER PERIOD [INTEGER])|(PERIOD INTEGER))[("E"|"e"i) [PLUS|MINUS] INTEGER ]
     
