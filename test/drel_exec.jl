@@ -11,16 +11,17 @@ end
 
 const db = setup()
 
+#==
 @testset "Test generation of missing keys" begin
     d = get_dictionary(db)
-    @test get_func(d,"SymEquiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
+    @test get_func(d,"symequiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
 end
 
 @testset "Test dictionary-defined functions" begin
     # Test that our functions are available
     d = get_dictionary(db)
     println("$(keys(d.func_defs))")
-    @test get_func(d,"SymKey")("2_555",db) == 2
+    @test get_func(d,"symkey")("2_555",db) == 2
 end
 
 @testset "Test single-step derivation" begin
@@ -52,7 +53,7 @@ end
     println("$(code_typed(get_func(get_dictionary(db),"_atom_site.tensor_beta"),(dynamic_block,CatPacket)))")
     true
 end
-
+==#
 @testset "Test F_calc" begin
     t = db["_refln.F_calc"]
     @test isapprox(t,[23.993,32.058,6.604],atol=0.01)

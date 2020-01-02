@@ -264,15 +264,20 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
     if typeof(ast_node) == Expr && ast_node.head == :(=)
         ixpr.head = ast_node.head
         found_target,ixpr.args[1] = find_target(ast_node.args[1],alias_name,target_obj)
-        if ixpr.args[1] == :__dreltarget && is_matrix
-            if typeof(ast_node.args[2]) == Expr && ast_node.args[2].head == :vect
-                println("Fixing implicit matrix assignment")
-                ixpr.args[2] = :(to_julia_array($(ast_node.args[2])))
+        if ixpr.args[1] == :__dreltarget
+            found_target = :__dreltarget
+            if is_matrix
+                if typeof(ast_node.args[2]) == Expr && ast_node.args[2].head == :vect
+                    println("Fixing implicit matrix assignment")
+                    ixpr.args[2] = :(to_julia_array($(ast_node.args[2])))
+                else
+                    ixpr.args[2] = ast_node.args[2]
+                end
             else
                 ixpr.args[2] = ast_node.args[2]
             end
         else
-            ixpr.args[2] = ast_node.args[2]  #no target on RHS
+            ixpr.args[2] = ast_node.args[2]  #no need to search for target on RHS
         end
         return found_target,ixpr
     elseif typeof(ast_node) == Expr && (ast_node.head == :ref ||
