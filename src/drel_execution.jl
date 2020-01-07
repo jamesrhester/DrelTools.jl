@@ -2,24 +2,17 @@
 export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
 
-println("Rule dict at compile time: $(get_rule_dict())")
-
 # Configuration
-const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
+#const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
+
+#include("lark_grammar.ebnf")
 
 # Create a parser for the dREL grammar. It needs to be contextual
 # due to such issues as an isolated variable "j" being parsed as the
 # signifier for an imaginary number.
 
-lark_grammar() = begin
-    grammar_text = read(joinpath(@__DIR__,drel_grammar),String)
-    ll = Lerche.Lark(grammar_text,start="input",parser="lalr",lexer="contextual")
-    return ll
-end
 
-precompile(lark_grammar,())
-
-const drel_parser = lark_grammar()
+const drel_parser = Serialization.deserialize(joinpath(@__DIR__,"..","deps","drel_grammar_serialised.jli"))
 
 # Parse and output proto-Julia code using Lerche
 
@@ -44,13 +37,13 @@ end
 
 make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary) = begin
     tree = Lerche.parse(drel_parser,drel_text)
-    println("Rule dict: $(get_rule_dict())")
+    #println("Rule dict: $(get_rule_dict())")
     transformer = TreeToJulia(dataname,dict)
     proto = transform(transformer,tree)
     tc_alias = transformer.target_category_alias
-    println("Proto-Julia code: ")
-    println(proto)
-    println("Target category aliased to $tc_alias")
+    #println("Proto-Julia code: ")
+    #println(proto)
+    #println("Target category aliased to $tc_alias")
     set_categories = get_set_categories(dict)
     parsed = ast_fix_indexing(proto,get_categories(dict),dict)
     println(parsed)
@@ -64,7 +57,7 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     
     parsed = fix_scope(parsed)
     parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
-    println("####\n    Assigning types\n####\n")
+    #println("####\n    Assigning types\n####\n")
     parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats=get_categories(dict))
 end
 

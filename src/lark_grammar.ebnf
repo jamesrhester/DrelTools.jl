@@ -1,14 +1,4 @@
-//# Number of braces found 8
-//# Number of braces found 0
-//# power found 1 times using ^[ ]*(power)
-//# primary found 1 times using ^[ ]*(primary)
-//# factor found 1 times using ^[ ]*(factor)
-//# term found 1 times using ^[ ]*(term)
-//# arith found 1 times using ^[ ]*(arith)
-//# comparison found 1 times using ^[ ]*(comparison)
-//# not_test found 1 times using ^[ ]*(not_test)
-//# and_test found 1 times using ^[ ]*(and_test)
-//# or_test found 1 times using ^[ ]*(or_test)
+const _drel_grammar_spec = raw"""
     
     LEFTPAREN : "("
     RIGHTPAREN : ")"
@@ -50,12 +40,12 @@
     HEXINT : /0x[0-9A-Fa-f]+/
     BININT : /0b[0-1]+/
     MISSING : "?"
-    NULL : "null"i
+    NULL : "NULL"
     
     real : ((INTEGER PERIOD [INTEGER])|(PERIOD INTEGER))[("E"|"e"i) [PLUS|MINUS] INTEGER ]
     
     imaginary : (real | INTEGER) ("j"i|"J")
-    LONGSTRING : /'''[^\\][.\n]*'''|"""[^\\][.\n]*"""/
+    LONGSTRING : /'''[^\\][.\n]*'''|\"""[^\\][.\n]*\"""/
     SHORTSTRING : /'[^']*'|"[^"]*"/
     AND : "and"i
     OR : "or"i
@@ -146,3 +136,4 @@
     one_arg : ident  ":"  "["  expression  ","  expression  "]" 
     input : statements 
 
+"""
