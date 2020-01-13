@@ -7,11 +7,12 @@ DOI: 10.1021/ci300076w) is a machine-readable language for describing the
 relationships between data names defined in a CIF (Crystallographic
 Information Framework) dictionary.  Examples of dREL
 use can be found in 
-(the latest CIF core dictionary)[https://github.com/COMCIFS/cif_core/cif_core.dic].
+[the latest CIF core dictionary](https://github.com/COMCIFS/cif_core/cif_core.dic).
 
 This package is experimental.  Method and type names are subject to
 change. It is likely to run a lot faster in the future as optimisations
-are implemented.
+are implemented.  Suggestions on speed improvement and new functionality
+are welcome.
 
 ## Installation
 
@@ -19,8 +20,7 @@ Install Julia.  At the Pkg prompt (ie after entering `]`) type
 `add CIF_dREL`.  Simply put `using CIF_dREL` at the top of any
 Julia code that uses methods from this package.
 
-Note that CIF support is provided by the CrystalInfoFramework.jl package,
-which you will probably also need to install in order to read in CIF
+Note that CIF support is provided by the [CrystalInfoFramework](https://github.com/jamesrhester/CrystalInfoFramework.jl) package, which you will probably also need to install in order to read in CIF
 files.
 
 Please advise of any difficulties in installation so that either these
