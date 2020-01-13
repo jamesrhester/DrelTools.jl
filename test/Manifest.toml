@@ -82,13 +82,6 @@ git-tree-sha1 = "b34d7cef7b337321e97d22242c3c2b91f476748e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.0"
 
-[[Lerche]]
-git-tree-sha1 = "8e192311afcf117ea5e978623de46b073bbad71d"
-repo-rev = "master"
-repo-url = "/home/jrh/programs/Lerche.jl"
-uuid = "d42ef402-04e6-4356-9f73-091573ea58dc"
-version = "0.1.1"
-
 [[LibGit2]]
 uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 
