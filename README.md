@@ -28,14 +28,17 @@ instructions or the installation setup can be improved.
 
 ## Usage
 
-1. After creating an ordinary Cifdic, ``define_dict_funcs(c::Cifdic)`` will
-add all dREL functions found in the dictionary to that dictionary as
-evaluated Julia definitions. Note that dREL functions are distinct from the
-methods found inside definitions.
+1. ``define_dict_funcs(c::Cifdic)`` will
+process all dREL functions found in the dictionary. This must be
+called if the dictionary contains a ``Function`` category.
+Note that dREL functions are like library functions
+that are not associated with data names, unlike the methods found 
+inside definitions.
 2. A ``dynamic_block`` is a CIF block that can evaluate missing datanames 
 using dREL code found in the dictionary for that dataname, potentially executing long
 chains of other evaluations.  The resulting values are **not**
-stored in the block, but are cached.
+stored in the block, but are cached. The example below shows how a ``dynamic_block``
+is created from a data block and a dictionary.
 3. ``derive(d::dynamic_block,s::String)`` will derive the value of dataname
 ``s`` based on other values in the block and dREL code found in the dictionary
 associated with ``d``.
