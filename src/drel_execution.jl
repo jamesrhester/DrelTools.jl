@@ -11,7 +11,6 @@ export add_definition_func, empty_cache!
 # due to such issues as an isolated variable "j" being parsed as the
 # signifier for an imaginary number.
 
-
 const drel_parser = Serialization.deserialize(joinpath(@__DIR__,"..","deps","drel_grammar_serialised.jli"))
 
 # Parse and output proto-Julia code using Lerche
@@ -71,6 +70,11 @@ get_func_text(dict::abstract_cif_dictionary,dataname::String,meth_type::String) 
     end
     # TODO: allow multiple methods
     eval_meths = func_text[func_text[!,Symbol("_method.purpose")] .== meth_type,:]
+    println("Meth size for $dataname is $(size(eval_meths))")
+    if size(eval_meths,1) == 0
+        return ""
+    end
+    
     eval_meth = eval_meths[1,Symbol("_method.expression")]
 end
 
@@ -353,4 +357,16 @@ lookup_default(dict,dataname,cp) = begin
     as_string = dict[dataname]["_enumeration_default.value"][pos[1]]
     println(" $as_string")
     return get_julia_type(dict,dataname,[as_string])[1]
+end
+
+#== 
+
+Full dictionary processing
+
+==#
+
+compile_all_methods(dict) = begin
+    for k in keys(dict)
+        add_new_func(dict,k)
+    end
 end
