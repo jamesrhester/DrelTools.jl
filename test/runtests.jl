@@ -1,5 +1,6 @@
 #Testing dREL runtime support
 using CrystalInfoFramework
+using DataContainer
 using CIF_dREL
 using Test
 

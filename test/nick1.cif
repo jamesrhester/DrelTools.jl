@@ -96,10 +96,11 @@ loop_
     1   1   1   9.008   6.604   ?  ?
 
 loop_
-_model_site.id
+_model_site.label
+_model_site.symop
 _model_site.adp_eigen_system
- ['o1'  '1_555' ] ?
- ['o2'  '1_555' ] ?
+ 'o1'  '1_555'  ?
+ 'o2'  '1_555'  ?
 
 
 # These have nothing to do with the above sites, just for

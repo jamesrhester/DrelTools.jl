@@ -65,13 +65,13 @@ a fully-transformed parse tree
     header = Expr(:block,:(__dict=get_dictionary(__datablock)))
     for c in t.cat_ids
         push!(header.args,
-              :($(Symbol(c)) = CategoryObject(__datablock,$c))
+              :($(Symbol(c)) = __datablock[$c])
               )
     end
     push!(header.args,arg)
     push!(header.args,:(return __dreltarget))
     final_expr = quote
-        (__datablock::dynamic_block,__packet::CatPacket) -> $header
+        (__datablock::DynamicRelationalContainer,__packet::CatPacket) -> $header
     end
     return final_expr
 end
@@ -82,12 +82,16 @@ end
     @assert suite.head == :block
     reverse!(suite.args)
     for c in t.cat_ids
-        push!(suite.args,Expr(Symbol("="),Symbol(c), :(CategoryObject(__datablock,$c))))
+        push!(suite.args,Expr(Symbol("="),Symbol(c), :(__datablock[$c])))
+    end
+    push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock))))
+    if !ismissing(id)
+        push!(suite.args,Expr(:call,:println,:(String("Entered function ")),String(id)))
     end
     reverse!(suite.args)
     push!(suite.args, :(return $id))
     println("New function body:\n$suite")
-    func_def = :(($(args...),__datablock::dynamic_block)-> $suite)
+    func_def = :(($(args...),__datablock::DynamicRelationalContainer)-> $suite)
     return func_def
 end
     
@@ -300,7 +304,7 @@ end
         b == t.target_object
         return :__dreltarget
     else
-        return :($a.$(Symbol(lowercase(b))))
+        return :(drel_property_access($a,$(lowercase(b)),__datablock))
     end
 end
 
@@ -399,7 +403,7 @@ this is type "code", it should be caseless?
     end
     # Dictionary-defined functions
     if func_name in t.func_list
-        return :(get_func(get_dictionary(__datablock),$(func_name))($(args[3]...),__datablock))
+        return :(get_func(__dict,$(func_name))($(args[3]...),__datablock))
     end
     if length(args) == 3
         return transform_function_name(func_name,[])
@@ -512,7 +516,7 @@ end
 @inline_rule with_stmt(t::TreeToJulia,_,id1,_,id2,suite) = begin
     type_annot = :Any
     if id2 != :__packet
-        return :($id1 = $id2::CategoryObject;$suite)
+        return :($id1 = $id2::CifCategory;$suite)
     else
         t.target_category_alias = id1
         return :($id1 = $id2;$suite)

@@ -1,6 +1,11 @@
 #== This module defines functions for executing dREL code ==#
 export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
+export DynamicRelationalContainer, DynamicDDLmRC
+
+import CrystalInfoFramework.get_dictionary
+import DataContainer:get_key_datanames, get_value, get_name
+import DataContainer:get_raw_value
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -95,26 +100,45 @@ define_dict_funcs(c::abstract_cif_dictionary) = begin
     end
 end
 
-#== Dynamic blocks
+#== 
 
-A dynamic block, in addition to knowing types and default values, will also
-actively seek to derive missing information, including calculation of
-default values.  These values are cached for efficiency and appear as if
-they were present in the original file after they have been calculated once.
-To remove these values, the cache should be emptied.
+Dynamic datasource
+
+A dynamic datasource will also actively seek to derive missing
+information, including calculation of default values.  These values
+are cached for efficiency and appear as if they were present in the
+original file after they have been calculated once.  To remove these
+values, the cache should be emptied.
 
 ==#
 
-struct dynamic_block <: cif_container_with_dict
-    block::cif_block_with_dict
+abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
+
+struct DynamicDDLmRC <: DynamicRelationalContainer
+    base::RelationalContainer
+    dict::abstract_cif_dictionary #provides dREL functions
     value_cache::Dict{String,Any}
 end
 
-dynamic_block(cbwd::cif_block_with_dict) = dynamic_block(cbwd,Dict{String,Any}())
+DynamicDDLmRC(ds::DataSource,dict::abstract_cif_dictionary) = begin
+    DynamicDDLmRC(IsDataSource(),ds,dict)
+end
 
-empty_cache!(d::dynamic_block) = empty!(d.value_cache)
+DynamicDDLmRC(ds,dict::abstract_cif_dictionary) = begin
+    DynamicDDLmRC(DataSource(ds),ds,dict)
+end
 
-cache_value!(d::dynamic_block,name,value) = begin
+DynamicDDLmRC(::IsDataSource,ds,dict) = begin
+    DynamicDDLmRC(RelationalContainer(ds,dict),dict,Dict{String,Any}())
+end
+
+DynamicDDLmRC(cbwd::cif_container_with_dict) = begin
+    DynamicDDLmRC(get_datasource(cbwd),get_dictionary(cbwd))
+end
+
+empty_cache!(d::DynamicDDLmRC) = empty!(d.value_cache)
+
+cache_value!(d::DynamicDDLmRC,name,value) = begin
     if haskey(d.value_cache,name)
         println("WARNING: overwriting previously cached value")
         println("Was: $(d.value_cache[name])")
@@ -123,47 +147,120 @@ cache_value!(d::dynamic_block,name,value) = begin
     d.value_cache[name] = value
 end
 
-cache_value!(d::dynamic_block,name,index,value) = d.value_cache[name][index] = value
+cache_value!(d::DynamicDDLmRC,name,index,value) = d.value_cache[name][index] = value
 
-CrystalInfoFramework.get_dictionary(d::dynamic_block) = get_dictionary(d.block)
-CrystalInfoFramework.get_datablock(d::dynamic_block) = get_datablock(d.block)
-CrystalInfoFramework.get_typed_datablock(d::dynamic_block) = d
+get_dictionary(d::DynamicDDLmRC) = d.dict
 
-Base.getindex(d::dynamic_block,s::String) = begin
-    try
-        q = d.block[s]
-    catch KeyError
-        if haskey(d.value_cache,lowercase(s))
-            println("Returning cached value for $s")
-            return d.value_cache[lowercase(s)]
-        end
-        m = derive(d,s)
-        accept = any(x->!ismissing(x),m)
-        if !accept
-            m = CrystalInfoFramework.get_default(d,s)
-        end
-        cache_value!(d,lowercase(s), m)
-        return m
-    end
-end
-
-Base.keys(d::dynamic_block) = begin
-    real_keys = keys(get_datablock(d))
+Base.keys(d::DynamicDDLmRC) = begin
+    real_keys = DataContainer.get_all_datanames(d.base)
     cache_keys = keys(d.value_cache)
     return union(real_keys,cache_keys)
 end
 
-# While the original get_loop is almost perfect for our uses, it
-# will call getindex and therefore start deriving missing data names
-# if the data file explicitly contains missing values.
-#
-# CrystalInfoFramework.get_loop(d::dynamic_block,s::String) = begin
+Base.show(io::IO,d::DynamicDDLmRC) = begin
+    show(io,d.base)
+    show(io,d.value_cache)
+end
 
-# This method actively tries to derive default values
-CrystalInfoFramework.get_default(d::dynamic_block,s::String) = begin
-    dict = get_dictionary(d)
-    def_vals = CrystalInfoFramework.get_default(dict,s)
-    target_loop = CategoryObject(d,find_category(dict,s))
+Base.getindex(d::DynamicDDLmRC,s::String) = begin
+    if haskey(d.base,s)
+        return DynamicCat(d.base[s],d)
+    end
+    error("Please implement category method derivations")
+end
+
+# Legacy categories may appear without their key, for which
+# the DDLm dictionary may provide a method.
+
+#
+#  Dynamic Category
+#
+
+"""
+A dynamic category can derive missing values by reaching out to its parent relational container. Indexing
+with a lone value will always assume that it is the value of the key.
+"""
+struct DynamicCat <: CifCategory
+    base::CifCategory
+    parent::DynamicRelationalContainer
+end
+
+DynamicCat(l::LegacyCategory,p::DynamicRelationalContainer) = begin
+    dict = get_dictionary(l)
+    keyname = get_keys_for_cat(dict,get_name(l))
+    if length(keyname) != 1 #impossible if more than one
+        throw(error("Cannot create dynamic category for $(l.name)"))
+    end
+    keyname = keyname[1]
+    if !(has_func(dict,keyname))
+        add_new_func(dict,keyname)
+    end
+    func_code = get_func(dict,keyname)
+    key_vals = [Base.invokelatest(func_code,p,r) for r in l]
+    # if that worked create a DDLm category
+    if length(key_vals) == length(l)
+        base_cat = DDLmCategory(l,key_vals)
+        return DynamicCat(base_cat,p)
+    end
+    error("Failed to generate key $keyname")
+end
+
+Base.show(io::IO,dc::DynamicCat) = begin
+    show(io,dc.base)
+    show(io,keys(dc.parent))
+end
+
+#== CifCategory interface ==#
+
+get_key_datanames(d::DynamicCat) = get_key_datanames(d.base)
+get_name(d::DynamicCat) = get_name(d.base)
+Base.length(d::DynamicCat) = length(d.base)
+
+Base.getindex(d::DynamicCat,sym::Symbol) = begin
+    try
+        q = d.base[sym]
+    catch KeyError
+        s = d.base.symbol_to_name[sym]
+        if haskey(d.parent.value_cache,lowercase(s))
+            println("Returning cached value for $s")
+            return d.parent.value_cache[lowercase(s)]
+        end
+        m = derive(d,s)
+        accept = any(x->!ismissing(x),m)
+        if !accept
+            m = get_default(d,s)
+        end
+        cache_value!(d.parent,lowercase(s), m)
+        return m
+    end
+end
+
+# As we assume the original source data are immutable, any request
+# to set an index is routed to the cache
+
+Base.setindex(d::DynamicCat,s::String,v) = begin
+    cache_value!(d.value_cache,lowercase(s),v)
+end
+
+# Return the value at row n for `colname`
+get_value(d::DynamicCat,n::Int,colname::Symbol) = begin
+    return get_value(d.base,n,colname)
+end
+
+get_raw_value(d::DynamicCat,colname,n) = get_raw_value(d.base,colname,n)
+
+#== Methods for dynamic categories only ==#
+
+# This method actively tries to derive default values but will need the
+# entire data block.
+get_default(d::DynamicCat,s::String) = begin
+    dict = get_dictionary(d.base)
+    def_vals = get_default(dict,s)
+    cat_name = find_category(dict,s)
+    if !has_key(d.parent,cat_name)
+        throw(error("Cannot provide default value for $s,category $cat_name does not exist"))
+    end
+    target_loop = d.parent[cat_name]
     if !ismissing(def_vals)
         return [def_vals for i in target_loop]
     end
@@ -172,22 +269,28 @@ CrystalInfoFramework.get_default(d::dynamic_block,s::String) = begin
         add_definition_func!(dict,s)
     end
     func_code = get_def_meth(d,s,"enumeration.default")
-    return [Base.invokelatest(func_code,d,p) for p in target_loop]
+    return [Base.invokelatest(func_code,d.parent,p) for p in target_loop]
 end
 
+"""
+Derive missing values from a complete collection
+"""
+derive(b::DynamicRelationalContainer,dataname::String) = begin
+    dict = get_dictionary(b)
+    if !(has_func(dict,dataname))
+        add_new_func(dict,dataname)
+    end
+    func_code = get_func(dict,dataname)
+    target_loop = b[find_category(dict,dataname)]
+    [Base.invokelatest(func_code,b,p) for p in target_loop]
+end
 
 #==Derive all values in a loop for the given
 dataname==#
 
-derive(d::dynamic_block,s::String) = begin
+derive(d::DynamicCat,s::String) = begin
     println("###\n\n    Deriving $s\n#####")
-    dict = get_dictionary(d)
-    if !(has_func(dict,s))
-        add_new_func(dict,s)
-    end
-    func_code = get_func(dict,s)
-    target_loop = CategoryObject(d,find_category(dict,s))
-    [Base.invokelatest(func_code,d,p) for p in target_loop]
+    derive(d.parent,s)
 end
 
 #== Per packet derivation
@@ -196,23 +299,24 @@ This is called from within a dREL method when an item is
 found missing from a packet.
 ==#
     
-derive(d::dynamic_block,cat::String,obj::String,p::CatPacket) = begin
-    dict = get_dictionary(d)
+derive(p::CatPacket,obj::String) = begin
+    d = get_category(p)
+    dict = get_dictionary(d.parent)
+    cat = get_name(d)
     dataname = get_by_cat_obj(dict,(cat,obj))["_definition.id"][1]
     if !(has_func(dict,dataname))
         add_new_func(dict,dataname)
     end
     func_code = get_func(dict,dataname)
-    Base.invokelatest(func_code,d,p)
+    Base.invokelatest(func_code,d.parent,p)
 end
 
 # For a single row in a packet
-CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
-    dict = get_dictionary(cp)
-    block = get_datablock(cp)
-    mycat = get_name(cp)
+get_default(block::DynamicCat,cp::CatPacket,obj::Symbol) = begin
+    dict = get_dictionary(get_category(cp))
+    mycat = get_name(get_category(cp))
     dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
-    def_val = CrystalInfoFramework.get_default(dict,dataname)
+    def_val = get_default(dict,dataname)
     if !ismissing(def_val)
         return def_val
     end
@@ -229,46 +333,7 @@ CrystalInfoFramework.get_default(cp::CatPacket,obj::Symbol) = begin
     println("==== Invoking default function for $dataname ===")
     println("Stored code:")
     println(debug_info)
-    return Base.invokelatest(func_code,block,cp)
-end
-
-
-#== We redefine getproperty to allow derivation inside category
-packets.  If the property is missing, we populate the original
-data frame with a column of 'missing' values, so that each 
-subsequent packet can set the particular value it refers to.
-==#
-
-Base.getproperty(cp::CatPacket,obj::Symbol) = begin
-    raw_table = parent(getfield(cp,:dfr))
-    result = missing
-    try
-        result = getproperty(getfield(cp,:dfr),obj)
-    catch KeyError
-        # populate the column with 'missing' values
-        full_length = size(raw_table,1)
-        println("$obj is missing, adding $full_length missing values")
-        # explicitly set type otherwise DataFrames thinks it is Missing only
-        new_array = Array{Union{Missing,Any},1}(missing,full_length)
-        d = get_datablock(cp)
-        setproperty!(raw_table,obj, new_array)
-    end
-    if !ismissing(result)
-        return result
-    end
-    #println("$(getfield(cp,:dfr)) has no member $obj:deriving...")
-    # So we have to derive
-    # get the parent container with dictionary
-    db = get_datablock(cp)
-    m = derive(db,get_name(cp),String(obj),cp)
-    if ismissing(m)
-        m = CrystalInfoFramework.get_default(cp,obj)
-    end
-    # store the cached value
-    row_no = parentindices(getfield(cp,:dfr))[1]
-    raw_table[row_no,obj] = m
-    println("All values for $obj: $(raw_table[!,obj])")
-    return m
+    return Base.invokelatest(func_code,block.parent,cp)
 end
 
 add_new_func(d::abstract_cif_dictionary,s::String) = begin
@@ -348,6 +413,7 @@ lookup_default(dict,dataname,cp) = begin
     if ismissing(index_name) return missing
     end
     object_name = dict[index_name]["_name.object_id"][1]
+    # Note non-deriving form of getproperty
     current_val = getproperty(cp,Symbol(object_name))
     print("Indexing $dataname using $current_val to get")
     # Now index into the information
@@ -356,7 +422,7 @@ lookup_default(dict,dataname,cp) = begin
     if pos[1] == nothing return missing end
     as_string = dict[dataname]["_enumeration_default.value"][pos[1]]
     println(" $as_string")
-    return get_julia_type(dict,dataname,[as_string])[1]
+    return convert_to_julia(dict,dataname,[as_string])[1]
 end
 
 #== 

@@ -5,17 +5,13 @@ setup() = begin
     define_dict_funcs(p)
     n = NativeCif(joinpath(@__DIR__,"nick1.cif"))
     b = n["saly2_all_aniso"]
-    c = assign_dictionary(b,p)
-    return dynamic_block(c)
+    t = TypedDataSource(b,p)
+    return DynamicDDLmRC(t,p)
 end
 
 const db = setup()
 
-@testset "Test generation of missing keys" begin
-    d = get_dictionary(db)
-    @test get_func(d,"symequiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
-end
-
+#==
 @testset "Test dictionary-defined functions" begin
     # Test that our functions are available
     d = get_dictionary(db)
@@ -23,10 +19,16 @@ end
     @test get_func(d,"symkey")("2_555",db) == 2
 end
 
+@testset "Test generation of missing keys" begin
+    d = get_dictionary(db)
+    @test get_func(d,"symequiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
+end
+==#
+
 @testset "Test single-step derivation" begin
     s = derive(db,"_cell.atomic_mass")
     @test s[1] == 552.488
-    println("$(code_typed(get_func(get_dictionary(db),"_cell.atomic_mass"),(dynamic_block,CatPacket)))")
+    println("$(code_typed(get_func(get_dictionary(db),"_cell.atomic_mass"),(DynamicRelationalContainer,CatPacket)))")
     true
 end
 
@@ -49,7 +51,7 @@ end
 @testset "Test tensor beta" begin
     t = @time derive(db,"_atom_site.tensor_beta")
     println("$t")
-    println("$(code_typed(get_func(get_dictionary(db),"_atom_site.tensor_beta"),(dynamic_block,CatPacket)))")
+    println("$(code_typed(get_func(get_dictionary(db),"_atom_site.tensor_beta"),(DynamicRelationalContainer,CatPacket)))")
     true
 end
 

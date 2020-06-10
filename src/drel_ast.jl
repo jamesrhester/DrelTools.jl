@@ -50,7 +50,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             ixpr.args = [ast_assign_types(x,in_scope_dict,lhs=lh,cifdic=cifdic,all_cats=all_cats) for x in ast_node.args]
             return ixpr
         elseif lhs != nothing && ast_node.head == :(::)
-            if ast_node.args[2] in(:CategoryObject,:CatPacket)
+            if ast_node.args[2] in(:CifCategory,:CatPacket)
                 in_scope_dict[lhs] = String(ast_node.args[1])
             end
             ixpr.head = ast_node.head
@@ -99,17 +99,17 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             ixpr.head = ast_node.head
             ixpr.args = [ast_assign_types(x,in_scope_dict,lhs=nothing,cifdic=cifdic,all_cats=all_cats) for x in ast_node.args]
             return ixpr
-        elseif ast_node.head == :(.)   #property access, set categories also allowed
-            if ast_node.args[1] in keys(in_scope_dict)
+        elseif ast_node.head == :call && ast_node.args[1] == :drel_property_access
+            if ast_node.args[2] in keys(in_scope_dict)
                 # if assignment to '__packet', look further
-                target_cat = in_scope_dict[ast_node.args[1]]
-                if in_scope_dict[ast_node.args[1]] == "__packet"
+                target_cat = in_scope_dict[ast_node.args[2]]
+                if in_scope_dict[ast_node.args[2]] == "__packet"
                     target_cat = in_scope_dict[Symbol("__packet")]
                 end
                 #println("Looking up type for $target_cat")
-                return ast_construct_type(ast_node,cifdic,target_cat,String(ast_node.args[2].value))
-            elseif typeof(ast_node.args[1]) != Expr && String(ast_node.args[1]) in set_cats
-                return ast_construct_type(ast_node,cifdic,String(ast_node.args[1]),String(ast_node.args[2].value))
+                return ast_construct_type(ast_node,cifdic,target_cat,ast_node.args[3])
+            elseif typeof(ast_node.args[2]) != Expr && String(ast_node.args[2]) in set_cats
+                return ast_construct_type(ast_node,cifdic,String(ast_node.args[2]),String(ast_node.args[3]))
             else
                 println("WARNING: property access using unrecognised object $(ast_node)")
                 ixpr.head = ast_node.head
@@ -163,6 +163,8 @@ This is further complicated by the problem that tables are referenced exactly li
 dictionaries, so we must catch literal creation (checking for :Dict at the moment)
 and references to dictionary items that are defined to be Table type. 
 
+The form `__datablock[String]` refers to a category from the datablock and should
+be ignored.
 ==#
 
 ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = begin
@@ -181,11 +183,17 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             end
             return ixpr
         elseif lhs != nothing && ast_node.head == :(::)
-            if ast_node.args[2] == :CategoryObject
+            if ast_node.args[2] == :CifCategory
                 push!(in_scope_list, String(lhs))
             end
             return ast_node
-        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] in (:CategoryObject,:(Dict{String,Any}))
+        # Find category construction (old style)
+        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] in (:CifCategory,:(Dict{String,Any}))
+            push!(in_scope_list,String(lhs))
+            return ast_node
+        # Find category access (new style)
+        elseif lhs != nothing && ast_node.head == :ref && ast_node.args[1] == :__datablock
+            println("Found category lookup for $(ast_node.args[2])")
             push!(in_scope_list,String(lhs))
             return ast_node
         elseif ast_node.head in [:for]
@@ -195,6 +203,7 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             ixpr.args = [ast_fix_indexing(x,new_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
             println("At end of scope: $new_scope_list")
             return ixpr
+        # Fix the actual indexing
         elseif ast_node.head == :call && ast_node.args[1] == :getindex
             println("Found call of getindex")
             ixpr.head = ast_node.head
@@ -292,6 +301,17 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
         else
             return found_target,ast_node
         end
+    elseif typeof(ast_node) == Expr && ast_node.head == :call && ast_node.args[1] == :drel_property_access
+        if ast_node.args[2] == alias_name
+            println("Found potential target! $ast_node for alias $alias_name.$target_obj")
+            if typeof(ast_node.args[3]) == QuoteNode && ast_node.args[3].value == lowercase(target_obj) 
+                return (alias_name,target_obj),:__dreltarget
+            else
+                return found_target,ast_node
+            end
+        else
+            return found_target,ast_node
+        end
     elseif typeof(ast_node) == Expr
         ixpr.head = ast_node.head
         argresult = [find_target(x,alias_name,target_obj,is_matrix=is_matrix) for x in ast_node.args]
@@ -364,18 +384,18 @@ end
 
 #==
 Set category packets can be referenced directly without any looping
-statement. Our transformer creates a category object for every category
+statement. Our transformer accesses a category object for every category
 mentioned, but does not know about Set categories. We do, and so we
-catch the CategoryObject creation and create a CatPacket. We must change
+catch the DDLmCategory creation and create a CatPacket. We must change
 the type of any subsequent assignments.
 
 NB: nested CategoryObject calls will fail. Should not exist. ==#
 
 cat_to_packet(ast_node,set_cats) = begin
     ixpr = :()
-    if typeof(ast_node) == Expr && ast_node.head == :call
+    if typeof(ast_node) == Expr && ast_node.head == :ref && ast_node.args[1] == :__datablock
         ixpr.head = ast_node.head
-        if ast_node.args[1] == :CategoryObject && ast_node.args[3] in set_cats
+        if ast_node.args[2] in set_cats
             ixpr = :(first_packet($ast_node))
         else
             ixpr.args = [cat_to_packet(x,set_cats) for x in ast_node.args]
@@ -383,7 +403,7 @@ cat_to_packet(ast_node,set_cats) = begin
     elseif typeof(ast_node) == Expr && ast_node.head == :(::)
         ixpr.head = ast_node.head
         #println("$(ast_node.args[2]),$(ast_node.args[1])")
-        if ast_node.args[2] == :CategoryObject && String(ast_node.args[1]) in set_cats
+        if ast_node.args[2] == :CifCategory && String(ast_node.args[1]) in set_cats
             #println("Bazinga!")
             ixpr.args = [ast_node.args[1],:CatPacket]
         else
@@ -426,7 +446,7 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
                         found_cats[lh] = rhs_symb.args[2].args[3]
                         #first_packet(CategoryObject(__datablock,<set category>))
                         println("Assignment of $(found_cats[lh]) to $lh")
-                    elseif rhs_symb.args[1] == :CategoryObject  #Loop category
+                    elseif rhs_symb.args[1] == :CifCategory  #Loop category
                         found_cats[lh] = rhs_symb.args[3]
                         println("Assignment of $(found_cats[lh]) to $lh")
                     end
@@ -465,25 +485,25 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
             end
             map(q -> append!(dn_list,q),
                 [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
-        elseif ast_node.head == :(.)  #property access
-            if ast_node.args[1] in keys(found_cats) #a variable
-                target_cat = found_cats[ast_node.args[1]]
-                push!(dn_list,(target_cat,String(ast_node.args[2].value)))
-            elseif typeof(ast_node.args[1])!= Expr && String(ast_node.args[1]) in set_cats
-                push!(dn_list,(String(ast_node.args[1]),String(ast_node.args[2].value)))
-            elseif typeof(ast_node.args[1])==Expr
+        elseif ast_node.head == :call && ast_node.args[1] == :drel_property_access
+            if ast_node.args[2] in keys(found_cats) #a variable
+                target_cat = found_cats[ast_node.args[2]]
+                push!(dn_list,(target_cat,String(ast_node.args[3].value)))
+            elseif typeof(ast_node.args[2])!= Expr && String(ast_node.args[2]) in set_cats
+                push!(dn_list,(String(ast_node.args[2]),ast_node.args[3]))
+            elseif typeof(ast_node.args[2])==Expr
                 # dig out expressions of form "(a[b]).c"
-                sub_expr = ast_node.args[1]
+                sub_expr = ast_node.args[2]
                 if sub_expr.head == :ref
                     if sub_expr.args[1] in keys(found_cats)
                         # if assignment to '__packet', look further
                         target_cat = found_cats[sub_expr.args[1]]
-                        push!(dn_list,(target_cat,String(ast_node.args[2].value)))
+                        push!(dn_list,(target_cat,ast_node.args[3]))
                         return dn_list
                     end
                 end
                 map(q -> append!(dn_list,q),
-                    [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
+                    [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args[2:end]])
             end
         else
             map(q -> append!(dn_list,q),
