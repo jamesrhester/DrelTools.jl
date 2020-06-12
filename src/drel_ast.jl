@@ -192,8 +192,8 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             push!(in_scope_list,String(lhs))
             return ast_node
         # Find category access (new style)
-        elseif lhs != nothing && ast_node.head == :ref && ast_node.args[1] == :__datablock
-            println("Found category lookup for $(ast_node.args[2])")
+        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] == :get_category && ast_node.args[2] == :__datablock
+            println("Found category lookup for $(ast_node.args[3])")
             push!(in_scope_list,String(lhs))
             return ast_node
         elseif ast_node.head in [:for]
@@ -289,6 +289,7 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
             ixpr.args[2] = ast_node.args[2]  #no need to search for target on RHS
         end
         return found_target,ixpr
+    # Old style of cat.obj reference
     elseif typeof(ast_node) == Expr && (ast_node.head == :ref ||
                                         ast_node.head == :(.))
         if ast_node.args[1] == Symbol(alias_name)
@@ -301,10 +302,11 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
         else
             return found_target,ast_node
         end
+    # New style drel_property_access(a,"objectid",__datablock)
     elseif typeof(ast_node) == Expr && ast_node.head == :call && ast_node.args[1] == :drel_property_access
         if ast_node.args[2] == alias_name
             println("Found potential target! $ast_node for alias $alias_name.$target_obj")
-            if typeof(ast_node.args[3]) == QuoteNode && ast_node.args[3].value == lowercase(target_obj) 
+            if ast_node.args[3] == lowercase(target_obj) 
                 return (alias_name,target_obj),:__dreltarget
             else
                 return found_target,ast_node
@@ -393,9 +395,9 @@ NB: nested CategoryObject calls will fail. Should not exist. ==#
 
 cat_to_packet(ast_node,set_cats) = begin
     ixpr = :()
-    if typeof(ast_node) == Expr && ast_node.head == :ref && ast_node.args[1] == :__datablock
+    if typeof(ast_node) == Expr && ast_node.head == :call && ast_node.args[1] == :get_category && ast_node.args[2] == :__datablock
         ixpr.head = ast_node.head
-        if ast_node.args[2] in set_cats
+        if ast_node.args[3] in set_cats
             ixpr = :(first_packet($ast_node))
         else
             ixpr.args = [cat_to_packet(x,set_cats) for x in ast_node.args]
@@ -444,9 +446,9 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
                 if rhs_symb.head == :call
                     if rhs_symb.args[1] == :first_packet   #a Set category
                         found_cats[lh] = rhs_symb.args[2].args[3]
-                        #first_packet(CategoryObject(__datablock,<set category>))
+                        #first_packet(get_category(__datablock,<set category>))
                         println("Assignment of $(found_cats[lh]) to $lh")
-                    elseif rhs_symb.args[1] == :CifCategory  #Loop category
+                    elseif rhs_symb.args[1] == :get_category  #Loop category
                         found_cats[lh] = rhs_symb.args[3]
                         println("Assignment of $(found_cats[lh]) to $lh")
                     end

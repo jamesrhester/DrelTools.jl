@@ -65,7 +65,7 @@ a fully-transformed parse tree
     header = Expr(:block,:(__dict=get_dictionary(__datablock)))
     for c in t.cat_ids
         push!(header.args,
-              :($(Symbol(c)) = __datablock[$c])
+              :($(Symbol(c)) = get_category(__datablock,$c))
               )
     end
     push!(header.args,arg)
@@ -82,7 +82,7 @@ end
     @assert suite.head == :block
     reverse!(suite.args)
     for c in t.cat_ids
-        push!(suite.args,Expr(Symbol("="),Symbol(c), :(__datablock[$c])))
+        push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c))))
     end
     push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock))))
     if !ismissing(id)

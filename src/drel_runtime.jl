@@ -112,7 +112,7 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     dict = get_dictionary(datablock)
     dataname = get_by_cat_obj(dict,(catname,obj))["_definition.id"][1]
     result = missing
-    println("Looking for property $obj in $(source_cat.base.data_ptr)")
+    #println("Looking for property $obj in $(source_cat.data_ptr)")
     try
         result = getproperty(cp,Symbol(obj))  #non-deriving form
     catch AttributeError
@@ -123,11 +123,12 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
         cache_value!(datablock, dataname, new_array)
     end
     if !ismissing(result)
+        println("Found! $result")
         return result
     end
-    m = derive(cp,obj)
+    m = derive(cp,obj,datablock)
     if ismissing(m)
-        m = get_default(source_cat,obj)[rowno]
+        m = get_default(source_cat,obj,datablock)[rowno]
     end
     # store the cached value
     rowno = getfield(cp,:id)

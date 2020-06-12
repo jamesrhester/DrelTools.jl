@@ -5,7 +5,7 @@ export DynamicRelationalContainer, DynamicDDLmRC
 
 import CrystalInfoFramework.get_dictionary
 import DataContainer:get_key_datanames, get_value, get_name
-import DataContainer:get_raw_value
+import DataContainer:get_raw_value,get_category,has_category
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -152,7 +152,7 @@ cache_value!(d::DynamicDDLmRC,name,index,value) = d.value_cache[name][index] = v
 get_dictionary(d::DynamicDDLmRC) = d.dict
 
 Base.keys(d::DynamicDDLmRC) = begin
-    real_keys = DataContainer.get_all_datanames(d.base)
+    real_keys = keys(d.base)
     cache_keys = keys(d.value_cache)
     return union(real_keys,cache_keys)
 end
@@ -162,11 +162,32 @@ Base.show(io::IO,d::DynamicDDLmRC) = begin
     show(io,d.value_cache)
 end
 
+Base.haskey(d::DynamicDDLmRC,s::String) = begin
+    return s in keys(d)
+end
+
+"""
+`s` is always a canonical data name, and the value returned will
+be all values for that data name in the same order as the key values.
+"""
 Base.getindex(d::DynamicDDLmRC,s::String) = begin
-    if haskey(d.base,s)
-        return DynamicCat(d.base[s],d)
+    dict = get_dictionary(d)
+    cat = find_category(dict,s)
+    if has_category(d,cat)
+        # Create the category and find the object name
+        obj = Symbol(find_object(dict,s))
+        return DynamicCat(get_category(d.base,cat),d)[obj]
     end
     error("Please implement category method derivations")
+end
+
+get_category(d::DynamicDDLmRC,s::String) = begin
+    if has_category(d,s) return get_category(d.base,s) end
+    KeyError("Category $s not present: implement category methods")
+end
+
+has_category(d::DynamicDDLmRC,s::String) = begin
+    return has_category(d.base,s)
 end
 
 # Legacy categories may appear without their key, for which
@@ -220,7 +241,7 @@ Base.getindex(d::DynamicCat,sym::Symbol) = begin
     try
         q = d.base[sym]
     catch KeyError
-        s = d.base.symbol_to_name[sym]
+        s = d.base.object_to_name[sym]
         if haskey(d.parent.value_cache,lowercase(s))
             println("Returning cached value for $s")
             return d.parent.value_cache[lowercase(s)]
@@ -281,7 +302,7 @@ derive(b::DynamicRelationalContainer,dataname::String) = begin
         add_new_func(dict,dataname)
     end
     func_code = get_func(dict,dataname)
-    target_loop = b[find_category(dict,dataname)]
+    target_loop = get_category(b,find_category(dict,dataname))
     [Base.invokelatest(func_code,b,p) for p in target_loop]
 end
 
@@ -299,16 +320,16 @@ This is called from within a dREL method when an item is
 found missing from a packet.
 ==#
     
-derive(p::CatPacket,obj::String) = begin
+derive(p::CatPacket,obj::String,db) = begin
     d = get_category(p)
-    dict = get_dictionary(d.parent)
+    dict = get_dictionary(d)
     cat = get_name(d)
     dataname = get_by_cat_obj(dict,(cat,obj))["_definition.id"][1]
     if !(has_func(dict,dataname))
         add_new_func(dict,dataname)
     end
     func_code = get_func(dict,dataname)
-    Base.invokelatest(func_code,d.parent,p)
+    Base.invokelatest(func_code,db,p)
 end
 
 # For a single row in a packet
