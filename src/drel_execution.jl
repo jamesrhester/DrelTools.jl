@@ -181,9 +181,9 @@ Base.getindex(d::DynamicDDLmRC,s::String) = begin
     error("Please implement category method derivations")
 end
 
-get_category(d::DynamicDDLmRC,s::String) = begin
-    if has_category(d,s) return get_category(d.base,s) end
-    KeyError("Category $s not present: implement category methods")
+get_category(d::DynamicDDLmRC,s::String)::DynamicCat = begin
+    if has_category(d,s) return DynamicCat(get_category(d.base,s),d) end
+    throw(KeyError("Category $s not present: implement category methods"))
 end
 
 has_category(d::DynamicDDLmRC,s::String) = begin
@@ -268,29 +268,38 @@ get_value(d::DynamicCat,n::Int,colname::Symbol) = begin
     return get_value(d.base,n,colname)
 end
 
+get_dictionary(d::DynamicCat) = get_dictionary(d.parent)
+
 get_raw_value(d::DynamicCat,colname,n) = get_raw_value(d.base,colname,n)
 
 #== Methods for dynamic categories only ==#
 
 # This method actively tries to derive default values but will need the
 # entire data block.
+
+get_default(d::DynamicCat,s::String,x) = get_default(d,s)
+
 get_default(d::DynamicCat,s::String) = begin
-    dict = get_dictionary(d.base)
-    def_vals = get_default(dict,s)
+    db = d.parent
+    dict = get_dictionary(db)
+    def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
-    if !has_key(d.parent,cat_name)
+    if !has_category(db,cat_name)
         throw(error("Cannot provide default value for $s,category $cat_name does not exist"))
     end
-    target_loop = d.parent[cat_name]
+    target_loop = get_category(db,cat_name)
     if !ismissing(def_vals)
         return [def_vals for i in target_loop]
     end
+    # perhaps we can lookup up a default value?
+    m = lookup_default(dict,s,d)
+    if !ismissing(m) return m end
     # is there a derived default available?
     if !haskey(dict.def_meths,(s,"enumeration.default"))
         add_definition_func!(dict,s)
     end
-    func_code = get_def_meth(d,s,"enumeration.default")
-    return [Base.invokelatest(func_code,d.parent,p) for p in target_loop]
+    func_code = get_def_meth(dict,s,"enumeration.default")
+    return [Base.invokelatest(func_code,db,p) for p in target_loop]
 end
 
 """
@@ -333,11 +342,11 @@ derive(p::CatPacket,obj::String,db) = begin
 end
 
 # For a single row in a packet
-get_default(block::DynamicCat,cp::CatPacket,obj::Symbol) = begin
-    dict = get_dictionary(get_category(cp))
+get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
+    dict = get_dictionary(block)
     mycat = get_name(get_category(cp))
     dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
-    def_val = get_default(dict,dataname)
+    def_val = CrystalInfoFramework.get_default(dict,dataname)
     if !ismissing(def_val)
         return def_val
     end
@@ -354,7 +363,7 @@ get_default(block::DynamicCat,cp::CatPacket,obj::Symbol) = begin
     println("==== Invoking default function for $dataname ===")
     println("Stored code:")
     println(debug_info)
-    return Base.invokelatest(func_code,block.parent,cp)
+    return Base.invokelatest(func_code,block,cp)
 end
 
 add_new_func(d::abstract_cif_dictionary,s::String) = begin
@@ -429,12 +438,13 @@ current packet is used to index into the table
 
 ==#
 
-lookup_default(dict,dataname,cp) = begin
+lookup_default(dict::abstract_cif_dictionary,dataname::String,cp::CatPacket) = begin
     index_name = get(dict[dataname],"_enumeration.def_index_id",[missing])[1]
     if ismissing(index_name) return missing
     end
-    object_name = dict[index_name]["_name.object_id"][1]
+    object_name = find_object(dict,index_name)
     # Note non-deriving form of getproperty
+    println("Looking for $object_name in $(get_name(getfield(cp,:source_cat)))")
     current_val = getproperty(cp,Symbol(object_name))
     print("Indexing $dataname using $current_val to get")
     # Now index into the information
@@ -444,6 +454,10 @@ lookup_default(dict,dataname,cp) = begin
     as_string = dict[dataname]["_enumeration_default.value"][pos[1]]
     println(" $as_string")
     return convert_to_julia(dict,dataname,[as_string])[1]
+end
+
+lookup_default(dict::abstract_cif_dictionary,dataname::String,cat::CifCategory) = begin
+    [lookup_default(dict,dataname,cp) for cp in cat]
 end
 
 #== 

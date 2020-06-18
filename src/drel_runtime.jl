@@ -112,15 +112,20 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     dict = get_dictionary(datablock)
     dataname = get_by_cat_obj(dict,(catname,obj))["_definition.id"][1]
     result = missing
+    rowno = getfield(cp,:id)
     #println("Looking for property $obj in $(source_cat.data_ptr)")
     try
         result = getproperty(cp,Symbol(obj))  #non-deriving form
     catch AttributeError
-        # populate the column with 'missing' values
-        println("$obj is missing, adding missing values")
-        # explicitly set type otherwise DataFrames thinks it is Missing only
-        new_array = Array{Union{Missing,Any},1}(missing,length(source_cat))
-        cache_value!(datablock, dataname, new_array)
+        if !haskey(datablock,dataname)
+            # populate the column with 'missing' values
+            println("$obj is missing, adding missing values")
+            # explicitly set type otherwise DataFrames thinks it is Missing only
+            new_array = Array{Union{Missing,Any},1}(missing,length(source_cat))
+            cache_value!(datablock, dataname, new_array)
+        else
+            result = datablock[dataname][rowno]
+        end
     end
     if !ismissing(result)
         println("Found! $result")
@@ -128,10 +133,9 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     end
     m = derive(cp,obj,datablock)
     if ismissing(m)
-        m = get_default(source_cat,obj,datablock)[rowno]
+        m = get_default(datablock,cp,Symbol(obj))[rowno]
     end
     # store the cached value
-    rowno = getfield(cp,:id)
     cache_value!(datablock,dataname,rowno, m)
     return m
 end

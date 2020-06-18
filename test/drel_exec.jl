@@ -23,7 +23,7 @@ end
     d = get_dictionary(db)
     @test get_func(d,"symequiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
 end
-==#
+
 
 @testset "Test single-step derivation" begin
     s = derive(db,"_cell.atomic_mass")
@@ -58,4 +58,14 @@ end
 @testset "Test F_calc" begin
     t = db["_refln.F_calc"]
     @test isapprox(t,[23.993,32.058,6.604],atol=0.01)
+end
+==#
+
+@testset "Test category methods" begin
+    t = db["_geom_bond.distance"]
+    lookup_dict = Dict(:atom_site_label_1=>"C1A",
+                       :atom_site_label_2=>"C2A",
+                       :site_symmetry_1=>".",
+                       :site_symmetry_2=>".")
+    @test get_category(db,"geom_bond")[lookup_dict].distance == 1.524
 end
