@@ -62,10 +62,12 @@ end
 ==#
 
 @testset "Test category methods" begin
-    t = db["_geom_bond.distance"]
-    lookup_dict = Dict(:atom_site_label_1=>"C1A",
-                       :atom_site_label_2=>"C2A",
-                       :site_symmetry_1=>".",
-                       :site_symmetry_2=>".")
-    @test get_category(db,"geom_bond")[lookup_dict].distance == 1.524
+    m = get_category(db,"model_site")
+    println("Created category $m")
+    #t = db["_geom_bond.distance"]
+    #lookup_dict = Dict(:atom_site_label_1=>"C1A",
+    #                   :atom_site_label_2=>"C2A",
+    #                   :site_symmetry_1=>".",
+    #                   :site_symmetry_2=>".")
+    #@test get_category(db,"geom_bond")[lookup_dict].distance == 1.524
 end

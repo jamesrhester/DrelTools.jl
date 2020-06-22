@@ -397,7 +397,7 @@ cat_to_packet(ast_node,set_cats) = begin
     ixpr = :()
     if typeof(ast_node) == Expr && ast_node.head == :call && ast_node.args[1] == :get_category && ast_node.args[2] == :__datablock
         ixpr.head = ast_node.head
-        if ast_node.args[3] in set_cats
+        if lowercase(ast_node.args[3]) in set_cats
             ixpr = :(first_packet($ast_node))
         else
             ixpr.args = [cat_to_packet(x,set_cats) for x in ast_node.args]
@@ -405,7 +405,7 @@ cat_to_packet(ast_node,set_cats) = begin
     elseif typeof(ast_node) == Expr && ast_node.head == :(::)
         ixpr.head = ast_node.head
         #println("$(ast_node.args[2]),$(ast_node.args[1])")
-        if ast_node.args[2] == :CifCategory && String(ast_node.args[1]) in set_cats
+        if ast_node.args[2] == :CifCategory && lowercase(String(ast_node.args[1])) in set_cats
             #println("Bazinga!")
             ixpr.args = [ast_node.args[1],:CatPacket]
         else

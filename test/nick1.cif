@@ -95,32 +95,6 @@ loop_
     0   1   1  33.109  32.058   ?  ?
     1   1   1   9.008   6.604   ?  ?
 
-loop_
-_model_site.label
-_model_site.symop
-_model_site.adp_eigen_system
- 'o1'  '1_555'  ?
- 'o2'  '1_555'  ?
-
-
-# These have nothing to do with the above sites, just for
-# testing purposes.
-loop_
-    _geom_bond.atom_site_label_1
-    _geom_bond.atom_site_label_2
-    _geom_bond.site_symmetry_1
-    _geom_bond.site_symmetry_2
-    _geom_bond.distance
-    _geom_bond.publ_flag
-    C1A C2A . . 1.524(4) y
-    C1A C11A . . 1.539(4) n
-    C1A C6A . . 1.552(3) n
-    C1A C10A . . 1.555(4) n
-    C2A O1A . . 1.434(3) y
-    C2A C3A . . 1.521(4) n
-    C2A H2A . . 0.9800 n
-    C3A C4A . . 1.533(4) n
-    C3A H3A1 . . 0.9700 n
 
 # inserted by JRH; should be able to calculate a default
 # based on presence of other items??
@@ -128,3 +102,6 @@ _diffrn_radiation.probe                x-ray
 # inserted by JRH; there is no way to figure out a
 # sensible default here
 _reflns.apply_dispersion_to_Fcalc       Yes
+#
+_geom.bond_distance_min    0.5
+_geom.bond_distance_incr   0.5

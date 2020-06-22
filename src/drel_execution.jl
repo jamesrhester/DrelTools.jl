@@ -51,14 +51,15 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     set_categories = get_set_categories(dict)
     parsed = ast_fix_indexing(proto,get_categories(dict),dict)
     println(parsed)
-    # catch implicit matrix assignments
-    container_type = dict[dataname]["_type.container"][1]
-    is_matrix = (container_type == "Matrix" || container_type == "Array")
-    ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
-    if ft == nothing && !transformer.is_func
-        error("Epic fail: no target identified for $dataname")
+    if !transformer.is_category   #not relevant for category methods
+        # catch implicit matrix assignments
+        container_type = dict[dataname]["_type.container"][1]
+        is_matrix = (container_type == "Matrix" || container_type == "Array")
+        ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
+        if ft == nothing && !transformer.is_func
+            println("WARNING: no target identified for $dataname")
+        end
     end
-    
     parsed = fix_scope(parsed)
     parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     #println("####\n    Assigning types\n####\n")
@@ -171,19 +172,20 @@ end
 be all values for that data name in the same order as the key values.
 """
 Base.getindex(d::DynamicDDLmRC,s::String) = begin
+    if haskey(d.value_cache,s) return d.value_cache[s] end
     dict = get_dictionary(d)
     cat = find_category(dict,s)
-    if has_category(d,cat)
-        # Create the category and find the object name
-        obj = Symbol(find_object(dict,s))
-        return DynamicCat(get_category(d.base,cat),d)[obj]
-    end
-    error("Please implement category method derivations")
+    obj = Symbol(find_object(dict,s))
+    return get_category(d,cat)[obj]
 end
 
 get_category(d::DynamicDDLmRC,s::String)::DynamicCat = begin
-    if has_category(d,s) return DynamicCat(get_category(d.base,s),d) end
-    throw(KeyError("Category $s not present: implement category methods"))
+    if has_category(d,s) return DynamicCat(get_category(d.base,s),d)
+    elseif lowercase(s) in get_set_categories(get_dictionary(d))
+        return DynamicCat(SetCategory(s,d.base,get_dictionary(d)),d)
+    else
+        return derive_category(d,s)
+    end
 end
 
 has_category(d::DynamicDDLmRC,s::String) = begin
@@ -220,7 +222,7 @@ DynamicCat(l::LegacyCategory,p::DynamicRelationalContainer) = begin
     key_vals = [Base.invokelatest(func_code,p,r) for r in l]
     # if that worked create a DDLm category
     if length(key_vals) == length(l)
-        base_cat = DDLmCategory(l,key_vals)
+        base_cat = LoopCategory(l,key_vals)
         return DynamicCat(base_cat,p)
     end
     error("Failed to generate key $keyname")
@@ -341,6 +343,35 @@ derive(p::CatPacket,obj::String,db) = begin
     Base.invokelatest(func_code,db,p)
 end
 
+#==
+
+Category methods
+
+==#
+
+#==
+
+Category methods create whole new categories
+
+==#
+
+derive_category(b::DynamicRelationalContainer,cat::String) = begin
+    dict = get_dictionary(b)
+    if !(has_func(dict,cat))
+        add_new_func(dict,cat)
+    else
+        println("Func for $cat already exists")
+    end
+    func_code = get_func(dict,cat)
+    col_vals = Base.invokelatest(func_code,b)
+    # Convert to canonical names
+    col_vals = (lowercase(get_by_cat_obj(dict,(cat,x.first))["_definition.id"][1]) => x.second for x in col_vals)
+    col_vals = Dict(col_vals...)
+    println("Raw values for $cat: $col_vals")
+    tds = TypedDataSource(col_vals,dict)
+    DynamicCat(LoopCategory(cat,tds),b)
+end
+
 # For a single row in a packet
 get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
     dict = get_dictionary(block)
@@ -418,9 +449,10 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
         r = make_julia_code(t,s,d)
         att_name = "not found"
         for (a,targ) in all_set_ddlm
-            ft,r = find_target(r,a,targ)
+            ft,r = find_target(r,Symbol(a),targ)
             if ft != nothing
-                att_name = "$(ft[1]).$(ft[2])"
+                println("Found target: $ft")
+                att_name = "$a.$targ"
                 break
             end
         end
@@ -471,3 +503,4 @@ compile_all_methods(dict) = begin
         add_new_func(dict,k)
     end
 end
+

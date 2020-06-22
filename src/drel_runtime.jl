@@ -6,7 +6,7 @@
 
 using LinearAlgebra
 
-export drelvector,to_julia_array
+export drelvector,to_julia_array,drel_strip
 
 # a character can be compared to a single-character string
 Base.:(==)(c::Char,y::String) = begin
@@ -133,7 +133,7 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     end
     m = derive(cp,obj,datablock)
     if ismissing(m)
-        m = get_default(datablock,cp,Symbol(obj))[rowno]
+        m = get_default(datablock,cp,Symbol(obj))
     end
     # store the cached value
     cache_value!(datablock,dataname,rowno, m)
@@ -143,4 +143,16 @@ end
 # Generic fallback
 drel_property_access(a,b,c) = begin
     return getproperty(a,b)
+end
+
+"""
+
+drel_strip implements the drel "Strip" function.
+
+drel_strip(array,n) returns an array consisting of
+the nth element of the constituent arrays. n counts
+from zero
+"""
+drel_strip(a::Array,n::Int) = begin
+    return (b[n+1] for b in a)
 end
