@@ -1,11 +1,11 @@
 #== This module defines functions for executing dREL code ==#
 export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
-export DynamicRelationalContainer, DynamicDDLmRC
+export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 
 import CrystalInfoFramework.get_dictionary
 import DataContainer:get_key_datanames, get_value, get_name
-import DataContainer:get_raw_value,get_category,has_category
+import DataContainer:get_category, has_category, get_data
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -116,7 +116,7 @@ values, the cache should be emptied.
 abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
 
 struct DynamicDDLmRC <: DynamicRelationalContainer
-    base::RelationalContainer
+    data
     dict::abstract_cif_dictionary #provides dREL functions
     value_cache::Dict{String,Any}
 end
@@ -130,12 +130,14 @@ DynamicDDLmRC(ds,dict::abstract_cif_dictionary) = begin
 end
 
 DynamicDDLmRC(::IsDataSource,ds,dict) = begin
-    DynamicDDLmRC(RelationalContainer(ds,dict),dict,Dict{String,Any}())
+    DynamicDDLmRC(ds,dict,Dict{String,Any}())
 end
 
 DynamicDDLmRC(cbwd::cif_container_with_dict) = begin
     DynamicDDLmRC(get_datasource(cbwd),get_dictionary(cbwd))
 end
+
+DynamicDDLmRC(r::AbstractRelationalContainer) = DynamicDDLmRC(get_data(r),get_dictionary(r))
 
 empty_cache!(d::DynamicDDLmRC) = empty!(d.value_cache)
 
@@ -150,16 +152,27 @@ end
 
 cache_value!(d::DynamicDDLmRC,name,index,value) = d.value_cache[name][index] = value
 
+cache_cat!(d::DynamicDDLmRC,catname,catvalue) = begin
+    for k in get_datanames(catvalue)
+        cache_value!(d,k,catvalue[k])
+    end
+end
+
 get_dictionary(d::DynamicDDLmRC) = d.dict
 
+# We treat ourselves as a data source so that the
+# cached values and supplied values are both accessible
+
+get_data(d::DynamicDDLmRC) = d
+
 Base.keys(d::DynamicDDLmRC) = begin
-    real_keys = keys(d.base)
+    real_keys = keys(d.data)
     cache_keys = keys(d.value_cache)
     return union(real_keys,cache_keys)
 end
 
 Base.show(io::IO,d::DynamicDDLmRC) = begin
-    show(io,d.base)
+    show(io,d.data)
     show(io,d.value_cache)
 end
 
@@ -170,26 +183,39 @@ end
 """
 `s` is always a canonical data name, and the value returned will
 be all values for that data name in the same order as the key values.
+Note that new values can only be derived via categories
 """
 Base.getindex(d::DynamicDDLmRC,s::String) = begin
     if haskey(d.value_cache,s) return d.value_cache[s] end
-    dict = get_dictionary(d)
-    cat = find_category(dict,s)
-    obj = Symbol(find_object(dict,s))
-    return get_category(d,cat)[obj]
-end
-
-get_category(d::DynamicDDLmRC,s::String)::DynamicCat = begin
-    if has_category(d,s) return DynamicCat(get_category(d.base,s),d)
-    elseif lowercase(s) in get_set_categories(get_dictionary(d))
-        return DynamicCat(SetCategory(s,d.base,get_dictionary(d)),d)
-    else
-        return derive_category(d,s)
+    if haskey(d.data,s) return d.data[s] end
+    m = derive(d,s)
+    accept = any(x->!ismissing(x),m)
+    if !accept
+        m = get_default(d,s)
     end
+    if any(x->!ismissing(x),m)
+        d[lowercase(s)]= m
+        return m
+    end
+    throw(KeyError("$s"))
 end
 
-has_category(d::DynamicDDLmRC,s::String) = begin
-    return has_category(d.base,s)
+Base.setindex!(d::DynamicDDLmRC,v,s::String) = d.value_cache[s]=v
+
+get_category(d::DynamicDDLmRC,s::String) = begin
+    dict = get_dictionary(d)
+    cat_type = get(dict[s],"_definition.class",["Datum"])[]
+    if cat_type == "Set"   #an empty category is good enough
+        println("Building empty category $s")
+        return construct_category(d,s)
+    end
+    println("Searching for category $s")
+    dict = get_dictionary(d)
+    if has_category(d,s) return construct_category(d,s) end
+    derive_category(d,s)   #worth a try
+    if has_category(d,s) return construct_category(d,s) end
+    println("Category $s not found")
+    return missing
 end
 
 # Legacy categories may appear without their key, for which
@@ -199,90 +225,7 @@ end
 #  Dynamic Category
 #
 
-"""
-A dynamic category can derive missing values by reaching out to its parent relational container. Indexing
-with a lone value will always assume that it is the value of the key.
-"""
-struct DynamicCat <: CifCategory
-    base::CifCategory
-    parent::DynamicRelationalContainer
-end
-
-DynamicCat(l::LegacyCategory,p::DynamicRelationalContainer) = begin
-    dict = get_dictionary(l)
-    keyname = get_keys_for_cat(dict,get_name(l))
-    if length(keyname) != 1 #impossible if more than one
-        throw(error("Cannot create dynamic category for $(l.name)"))
-    end
-    keyname = keyname[1]
-    if !(has_func(dict,keyname))
-        add_new_func(dict,keyname)
-    end
-    func_code = get_func(dict,keyname)
-    key_vals = [Base.invokelatest(func_code,p,r) for r in l]
-    # if that worked create a DDLm category
-    if length(key_vals) == length(l)
-        base_cat = LoopCategory(l,key_vals)
-        return DynamicCat(base_cat,p)
-    end
-    error("Failed to generate key $keyname")
-end
-
-Base.show(io::IO,dc::DynamicCat) = begin
-    show(io,dc.base)
-    show(io,keys(dc.parent))
-end
-
-#== CifCategory interface ==#
-
-get_key_datanames(d::DynamicCat) = get_key_datanames(d.base)
-get_name(d::DynamicCat) = get_name(d.base)
-Base.length(d::DynamicCat) = length(d.base)
-
-Base.getindex(d::DynamicCat,sym::Symbol) = begin
-    try
-        q = d.base[sym]
-    catch KeyError
-        s = d.base.object_to_name[sym]
-        if haskey(d.parent.value_cache,lowercase(s))
-            println("Returning cached value for $s")
-            return d.parent.value_cache[lowercase(s)]
-        end
-        m = derive(d,s)
-        accept = any(x->!ismissing(x),m)
-        if !accept
-            m = get_default(d,s)
-        end
-        cache_value!(d.parent,lowercase(s), m)
-        return m
-    end
-end
-
-# As we assume the original source data are immutable, any request
-# to set an index is routed to the cache
-
-Base.setindex(d::DynamicCat,s::String,v) = begin
-    cache_value!(d.value_cache,lowercase(s),v)
-end
-
-# Return the value at row n for `colname`
-get_value(d::DynamicCat,n::Int,colname::Symbol) = begin
-    return get_value(d.base,n,colname)
-end
-
-get_dictionary(d::DynamicCat) = get_dictionary(d.parent)
-
-get_raw_value(d::DynamicCat,colname,n) = get_raw_value(d.base,colname,n)
-
-#== Methods for dynamic categories only ==#
-
-# This method actively tries to derive default values but will need the
-# entire data block.
-
-get_default(d::DynamicCat,s::String,x) = get_default(d,s)
-
-get_default(d::DynamicCat,s::String) = begin
-    db = d.parent
+get_default(db::DynamicRelationalContainer,s::String) = begin
     dict = get_dictionary(db)
     def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
@@ -317,14 +260,6 @@ derive(b::DynamicRelationalContainer,dataname::String) = begin
     [Base.invokelatest(func_code,b,p) for p in target_loop]
 end
 
-#==Derive all values in a loop for the given
-dataname==#
-
-derive(d::DynamicCat,s::String) = begin
-    println("###\n\n    Deriving $s\n#####")
-    derive(d.parent,s)
-end
-
 #== Per packet derivation
 
 This is called from within a dREL method when an item is
@@ -357,6 +292,8 @@ Category methods create whole new categories
 
 derive_category(b::DynamicRelationalContainer,cat::String) = begin
     dict = get_dictionary(b)
+    t = get_func_text(dict,cat,"Evaluation")
+    if t == "" return end
     if !(has_func(dict,cat))
         add_new_func(dict,cat)
     else
@@ -366,10 +303,9 @@ derive_category(b::DynamicRelationalContainer,cat::String) = begin
     col_vals = Base.invokelatest(func_code,b)
     # Convert to canonical names
     col_vals = (lowercase(get_by_cat_obj(dict,(cat,x.first))["_definition.id"][1]) => x.second for x in col_vals)
-    col_vals = Dict(col_vals...)
-    println("Raw values for $cat: $col_vals")
-    tds = TypedDataSource(col_vals,dict)
-    DynamicCat(LoopCategory(cat,tds),b)
+    for p in col_vals
+        cache_value!(b,p.first,p.second)
+    end
 end
 
 # For a single row in a packet
