@@ -133,10 +133,6 @@ DynamicDDLmRC(::IsDataSource,ds,dict) = begin
     DynamicDDLmRC(ds,dict,Dict{String,Any}())
 end
 
-DynamicDDLmRC(cbwd::cif_container_with_dict) = begin
-    DynamicDDLmRC(get_datasource(cbwd),get_dictionary(cbwd))
-end
-
 DynamicDDLmRC(r::AbstractRelationalContainer) = DynamicDDLmRC(get_data(r),get_dictionary(r))
 
 empty_cache!(d::DynamicDDLmRC) = empty!(d.value_cache)
@@ -210,7 +206,6 @@ get_category(d::DynamicDDLmRC,s::String) = begin
         return construct_category(d,s)
     end
     println("Searching for category $s")
-    dict = get_dictionary(d)
     if has_category(d,s) return construct_category(d,s) end
     derive_category(d,s)   #worth a try
     if has_category(d,s) return construct_category(d,s) end
