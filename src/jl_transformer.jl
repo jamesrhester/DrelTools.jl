@@ -31,11 +31,12 @@ The transformer methods will assume that any interior nodes have already been pr
     cat_list::Array{String}
     att_dict::Dict
     func_list::Array
-    cat_ids::Set{String}
+    cat_ids::Set{Tuple}
     obj_ids::Array{Symbol} #category methods only
     target_category_alias::Symbol
     ddlm_cats::Set
     aug_assign_table::Dict{String,Function}
+    namespace::String
 end
 
 TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict()) = begin
@@ -51,16 +52,17 @@ TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict()) = begin
     end
     func_cat,func_list = get_dict_funcs(data_dict)
     is_func = target_cat == func_cat
+    nspace = get_dic_namespace(data_dict)
     TreeToJulia(target_cat,target_object,is_func,is_validation,
                 is_category,
                 cat_list,att_dict,func_list,Set(),[],Symbol(target_cat),
-                Set(),Dict("++="=>push!,"--="=>error))
+                Set(),Dict("++="=>push!,"--="=>error),nspace)
 end
 
 # For testing, a default
 TreeToJulia() = begin
     TreeToJulia("dummy","dummer",true,false,false,["a","b","c"],Dict(),[],Set(),[],:dummy,
-                Set(),Dict())
+                Set(),Dict(),"")
 end
 
 #== The top level
@@ -72,11 +74,17 @@ a fully-transformed parse tree
 
 @inline_rule input(t::TreeToJulia,arg) = begin
     if t.is_func return arg end
-    header = Expr(:block,:(__dict=get_dictionary(__datablock)))
-    for c in t.cat_ids
-        push!(header.args,
-              :($(Symbol(c)) = get_category(__datablock,$c))
-              )
+    header = Expr(:block,:(__dict=get_dictionary(__datablock,$(t.namespace))))
+    for (n,c) in t.cat_ids
+        if !isnothing(n)
+            push!(header.args,
+                  :($(Symbol(String(n)*"_"*String(c))) = get_category(__datablock,$c,$n))
+                  )
+        else
+            push!(header.args,
+                  :($(Symbol(c)) = get_category(__datablock,$c))
+                  )
+        end
     end
     for c in t.obj_ids   #category methods only
         push!(header.args,
@@ -106,10 +114,14 @@ end
     #println("Function body:\n$suite")
     @assert suite.head == :block
     reverse!(suite.args)
-    for c in t.cat_ids
-        push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c))))
+    for (n,c) in t.cat_ids
+        if !isnothing(n)
+            push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c,$n))))
+        else
+            push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c))))
+        end
     end
-    push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock))))
+    push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock,$(t.namespace)))))
     if !ismissing(id)
         push!(suite.args,Expr(:call,:println,:(String("Entered function ")),String(id)))
     end
@@ -182,16 +194,32 @@ end
         id = id[2:end]
         lid = lid[2:end]
     end
-    # catch category references
-    if lid in t.cat_list && lid != t.target_cat
-        push!(t.cat_ids,String(id))
-    end
-    if lid == t.target_cat
-        id = :__packet
-    else
-        id = Symbol(id)
-    end
+    id = Symbol(id)
     return id
+end
+
+@inline_rule nspace(t::TreeToJulia,n,colon) = begin
+    return String(n)
+end
+
+@rule nident(t::TreeToJulia,nid) = begin
+    println("namespace id $nid")
+    if length(nid) == 2
+        # catch target category
+        if nid[1] == t.namespace && String(nid[2]) == t.target_cat
+            return :__packet
+        else
+            push!(t.cat_ids,(nid[1],String(nid[2])))
+            return Symbol(nid[1]*"_"*String(nid[2]))
+        end
+    else
+        if nid[1] == t.target_cat
+            return :__packet
+        elseif nid[1] in t.cat_list
+            push!(t.cat_ids,(nothing,nid[1]))
+        end
+        return Symbol(nid[1])
+    end
 end
 
 @rule id_list(t::TreeToJulia,idl) = begin

@@ -3,9 +3,8 @@ export dynamic_block, define_dict_funcs, derive, get_func_text
 export add_definition_func, empty_cache!
 export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 
-import CrystalInfoFramework.get_dictionary
 import DataContainer:get_key_datanames, get_value, get_name
-import DataContainer:get_category, has_category, get_data
+import DataContainer:get_category, has_category, get_data, get_dictionary
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -117,8 +116,8 @@ abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
 
 struct DynamicDDLmRC <: DynamicRelationalContainer
     data
-    dict::abstract_cif_dictionary #provides dREL functions
-    value_cache::Dict{String,Any}
+    dict::Dict{String,abstract_cif_dictionary} #provides dREL functions
+    value_cache::Dict{String,Dict{String,Any}} #namespace indexed
 end
 
 DynamicDDLmRC(ds::DataSource,dict::abstract_cif_dictionary) = begin
@@ -130,31 +129,50 @@ DynamicDDLmRC(ds,dict::abstract_cif_dictionary) = begin
 end
 
 DynamicDDLmRC(::IsDataSource,ds,dict) = begin
-    DynamicDDLmRC(ds,dict,Dict{String,Any}())
+    nspace = get_dic_namespace(dict)
+    DynamicDDLmRC(ds,Dict(nspace=>dict),Dict(nspace=>Dict{String,Any}()))
 end
 
-DynamicDDLmRC(r::AbstractRelationalContainer) = DynamicDDLmRC(get_data(r),get_dictionary(r))
+DynamicDDLmRC(r::AbstractRelationalContainer) = begin
+    nspaces = get_namespaces(r)
+    d = Dict{String,Dict{String,Any}}()
+    for n in nspaces
+        d[n] = Dict()
+    end
+    DynamicDDLmRC(r,get_dicts(r),d)
+end
 
-empty_cache!(d::DynamicDDLmRC) = empty!(d.value_cache)
+empty_cache!(d::DynamicDDLmRC) = begin
+    for k in keys(d.value_cache)
+        empty!(d.value_cache[k])
+    end
+end
 
 cache_value!(d::DynamicDDLmRC,name,value) = begin
-    if haskey(d.value_cache,name)
+    nspace = first(d.value_cache).first
+    cache_value!(d,nspace,name,value)
+end
+
+cache_value!(d::DynamicDDLmRC,nspace,name,value) = begin
+    if haskey(d.value_cache[nspace],name)
         println("WARNING: overwriting previously cached value")
-        println("Was: $(d.value_cache[name])")
+        println("Was: $(d.value_cache[nspace][name])")
         println("Now: $value")
     end
-    d.value_cache[name] = value
+    d.value_cache[nspace][name] = value
 end
 
-cache_value!(d::DynamicDDLmRC,name,index,value) = d.value_cache[name][index] = value
+cache_value!(d::DynamicDDLmRC,nspace,name,index,value) = d.value_cache[nspace][name][index] = value
 
-cache_cat!(d::DynamicDDLmRC,catname,catvalue) = begin
+cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
     for k in get_datanames(catvalue)
-        cache_value!(d,k,catvalue[k])
+        cache_value!(d,nspace,k,catvalue[k])
     end
 end
 
-get_dictionary(d::DynamicDDLmRC) = d.dict
+get_dictionary(d::DynamicDDLmRC) = first(d.dict).second
+
+get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 
 # We treat ourselves as a data source so that the
 # cached values and supplied values are both accessible
@@ -163,8 +181,8 @@ get_data(d::DynamicDDLmRC) = d
 
 Base.keys(d::DynamicDDLmRC) = begin
     real_keys = keys(d.data)
-    cache_keys = keys(d.value_cache)
-    return union(real_keys,cache_keys)
+    Iterators.flatten(real_keys, (
+    string.(n*"‡",keys(d.value_cache[n])) for n in keys(d.value_cache))...)
 end
 
 Base.show(io::IO,d::DynamicDDLmRC) = begin
@@ -179,15 +197,26 @@ end
 """
 `s` is always a canonical data name, and the value returned will
 be all values for that data name in the same order as the key values.
-Note that new values can only be derived via categories
+Note that new values can only be derived via categories.
+As we have namespaces, getindex only works if the namespace is included
+in `s`
 """
-Base.getindex(d::DynamicDDLmRC,s::String) = begin
-    if haskey(d.value_cache,s) return d.value_cache[s] end
+Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
     if haskey(d.data,s) return d.data[s] end
-    m = derive(d,s)
+    if occursin('‡', s)
+        nspace,realname = split(s,'‡')
+    else
+        nspace,realname = "",s
+    end
+    getindex(d,realname,nspace)
+end
+
+Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
+    if haskey(d.value_cache[nspace],s) return d.value_cache[nspace][s] end
+    m = derive(d,s,nspace)
     accept = any(x->!ismissing(x),m)
     if !accept
-        m = get_default(d,s)
+        m = get_default(d,s,nspace)
     end
     if any(x->!ismissing(x),m)
         d[lowercase(s)]= m
@@ -196,20 +225,20 @@ Base.getindex(d::DynamicDDLmRC,s::String) = begin
     throw(KeyError("$s"))
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::String) = d.value_cache[s]=v
+Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][s]=v
 
-get_category(d::DynamicDDLmRC,s::String) = begin
-    dict = get_dictionary(d)
+get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
+    dict = get_dictionary(d,nspace)
     cat_type = get(dict[s],"_definition.class",["Datum"])[]
     if cat_type == "Set"   #an empty category is good enough
         println("Building empty category $s")
-        return construct_category(d,s)
+        return construct_category(d,s,nspace)
     end
     println("Searching for category $s")
-    if has_category(d,s) return construct_category(d,s) end
-    derive_category(d,s)   #worth a try
-    if has_category(d,s) return construct_category(d,s) end
-    println("Category $s not found")
+    if has_category(d,s,nspace) return construct_category(d,s,nspace) end
+    derive_category(d,s,nspace)   #worth a try
+    if has_category(d,s,nspace) return construct_category(d,s,nspace) end
+    println("Category $s not found for namespace $nspace")
     return missing
 end
 
@@ -220,14 +249,14 @@ end
 #  Dynamic Category
 #
 
-get_default(db::DynamicRelationalContainer,s::String) = begin
-    dict = get_dictionary(db)
+get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
+    dict = get_dictionary(db,nspace)
     def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
-    if !has_category(db,cat_name)
-        throw(error("Cannot provide default value for $s,category $cat_name does not exist"))
+    if !has_category(db,cat_name,nspace)
+        throw(error("Cannot provide default value for $s,category $cat_name does not exist for namespace $nspace"))
     end
-    target_loop = get_category(db,cat_name)
+    target_loop = get_category(db,cat_name,nspace)
     if !ismissing(def_vals)
         return [def_vals for i in target_loop]
     end
@@ -245,8 +274,8 @@ end
 """
 Derive missing values from a complete collection
 """
-derive(b::DynamicRelationalContainer,dataname::String) = begin
-    dict = get_dictionary(b)
+derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
+    dict = get_dictionary(b,nspace)
     if !(has_func(dict,dataname))
         add_new_func(dict,dataname)
     end
@@ -285,8 +314,8 @@ Category methods create whole new categories
 
 ==#
 
-derive_category(b::DynamicRelationalContainer,cat::String) = begin
-    dict = get_dictionary(b)
+derive_category(b::DynamicRelationalContainer,cat::String,nspace) = begin
+    dict = get_dictionary(b,nspace)
     t = get_func_text(dict,cat,"Evaluation")
     if t == "" return end
     if !(has_func(dict,cat))
@@ -299,13 +328,13 @@ derive_category(b::DynamicRelationalContainer,cat::String) = begin
     # Convert to canonical names
     col_vals = (lowercase(get_by_cat_obj(dict,(cat,x.first))["_definition.id"][1]) => x.second for x in col_vals)
     for p in col_vals
-        cache_value!(b,p.first,p.second)
+        cache_value!(b,nspace,p.first,p.second)
     end
 end
 
 # For a single row in a packet
-get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
-    dict = get_dictionary(block)
+get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) = begin
+    dict = get_dictionary(block,nspace)
     mycat = get_name(get_category(cp))
     dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
     def_val = CrystalInfoFramework.get_default(dict,dataname)

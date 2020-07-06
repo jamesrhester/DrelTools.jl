@@ -73,6 +73,8 @@ const _drel_grammar_spec = raw"""
     literal : SHORTSTRING | LONGSTRING | INTEGER | HEXINT | OCTINT | BININT | NULL | MISSING | real | imaginary 
     
     ident : ID 
+    nspace : ID COLON 
+    nident : [ nspace ] ident 
     
     enclosure : parenth_form | list_display | table_display 
     parenth_form : LEFTPAREN expression_list RIGHTPAREN 
@@ -83,7 +85,7 @@ const _drel_grammar_spec = raw"""
     table_display : LEFTBRACE  table_contents RIGHTBRACE 
     table_contents : table_entry ( COMMA table_entry )* 
     table_entry : SHORTSTRING  COLON  expression 
-    att_primary : ident | attributeref | subscription | call 
+    att_primary : nident | attributeref | subscription | call 
 ?primary : att_primary | literal | enclosure 
     attributeref : att_primary "."  ( ID | INTEGER )  
     subscription : primary  "["  (proper_slice | slice_list | dotlist)  "]" 
@@ -95,7 +97,7 @@ const _drel_grammar_spec = raw"""
     long_slice : short_slice  COLON  expression 
     slice_list : (expression | proper_slice) ( COMMA (expression | proper_slice) )* 
     
-    call : ident  LEFTPAREN [expression_list] RIGHTPAREN 
+    call : nident  LEFTPAREN [expression_list] RIGHTPAREN 
 ?power : primary  [ PWR  factor ] 
     
 ?factor : power |  (PLUS|MINUS)  factor  
@@ -115,7 +117,7 @@ const _drel_grammar_spec = raw"""
     assignment :  lhs augop rhs 
     lhs : expression_list 
     rhs : expression_list 
-    dotlist_assign : ident "("  dotlist  ")" 
+    dotlist_assign : nident "("  dotlist  ")" 
     
     compound_statement : if_stmt | for_stmt | do_stmt | loop_stmt
                          | with_stmt | repeat_stmt | funcdef 
@@ -127,10 +129,10 @@ const _drel_grammar_spec = raw"""
     for_stmt : FOR  (id_list | "[" id_list "]")  IN  expression_list  suite 
     id_list : [id_list  ","]  ident 
     
-    loop_stmt :  LOOP ident AS ident [":"  ident  [restricted_comp_operator  ident]] suite 
+    loop_stmt :  LOOP ident AS nident [":"  ident  [restricted_comp_operator  ident]] suite 
     do_stmt : DO ident  "=" expression  ","  expression  [","  expression] suite 
     repeat_stmt : REPEAT suite 
-    with_stmt : WITH  ident  AS  ident  suite 
+    with_stmt : WITH  ident  AS  nident  suite 
     funcdef : FUNCTION  ident  "("  arglist  ")"  suite 
     arglist : one_arg | (arglist COMMA one_arg) 
     one_arg : ident  ":"  "["  expression  ","  expression  "]" 

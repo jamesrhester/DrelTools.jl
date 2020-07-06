@@ -57,3 +57,8 @@ derivations.
 
 ``test/drel_exec.jl`` contains simple demonstrations of how to
 make use of dREL scripts found in dictionaries.
+
+## Note
+
+The `deps` directory contains a short script to pre-build the dREL grammar. When
+changing the grammar this should be re-run.
