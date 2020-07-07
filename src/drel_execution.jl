@@ -5,6 +5,7 @@ export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 
 import DataContainer:get_key_datanames, get_value, get_name
 import DataContainer:get_category, has_category, get_data, get_dictionary
+import DataContainer:select_namespace
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -148,12 +149,12 @@ empty_cache!(d::DynamicDDLmRC) = begin
     end
 end
 
-cache_value!(d::DynamicDDLmRC,name,value) = begin
+cache_value!(d::DynamicDDLmRC,name::String,value) = begin
     nspace = first(d.value_cache).first
     cache_value!(d,nspace,name,value)
 end
 
-cache_value!(d::DynamicDDLmRC,nspace,name,value) = begin
+cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
     if haskey(d.value_cache[nspace],name)
         println("WARNING: overwriting previously cached value")
         println("Was: $(d.value_cache[nspace][name])")
@@ -162,7 +163,12 @@ cache_value!(d::DynamicDDLmRC,nspace,name,value) = begin
     d.value_cache[nspace][name] = value
 end
 
-cache_value!(d::DynamicDDLmRC,nspace,name,index,value) = d.value_cache[nspace][name][index] = value
+cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = d.value_cache[nspace][name][index] = value
+
+cache_value!(d::DynamicDDLmRC,name::String,index::Int,value) = begin
+    @assert length(d.value_cache) == 1
+    cache_value!(d,first(d.value_cache).first,name,index,value)
+end
 
 cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
     for k in get_datanames(catvalue)
@@ -179,10 +185,24 @@ get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 
 get_data(d::DynamicDDLmRC) = d
 
+get_namespace(d::DynamicDDLmRC) = begin
+    @assert length(d.dict) == 1
+    return first(keys(d.dict))
+end
+
+select_namespace(d::DynamicDDLmRC,nspace) = begin
+    DynamicDDLmRC(select_namespace(d.data,nspace),Dict(nspace=>d.dict[nspace]),
+                  Dict(nspace=>d.value_cache[nspace]))
+end
+
 Base.keys(d::DynamicDDLmRC) = begin
     real_keys = keys(d.data)
-    Iterators.flatten(real_keys, (
-    string.(n*"‡",keys(d.value_cache[n])) for n in keys(d.value_cache))...)
+    if length(d.value_cache) == 1   #no need for namespaces
+        vc_keys = (keys(first(d.value_cache).second),)
+    else
+        vc_keys = (string.(n*"‡",keys(d.value_cache[n])) for n in keys(d.value_cache))
+    end
+    Iterators.flatten((real_keys,vc_keys...))
 end
 
 Base.show(io::IO,d::DynamicDDLmRC) = begin
@@ -203,10 +223,11 @@ in `s`
 """
 Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
     if haskey(d.data,s) return d.data[s] end
+    realname = s
     if occursin('‡', s)
         nspace,realname = split(s,'‡')
     else
-        nspace,realname = "",s
+        nspace = get_namespace(d) 
     end
     getindex(d,realname,nspace)
 end
@@ -235,7 +256,11 @@ get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
         return construct_category(d,s,nspace)
     end
     println("Searching for category $s")
-    if has_category(d,s,nspace) return construct_category(d,s,nspace) end
+    if has_category(d,s,nspace)
+        c = construct_category(d,s,nspace)
+        if typeof(c) != LegacyCategory return c end
+        return repair_cat(d,c,nspace)
+    end
     derive_category(d,s,nspace)   #worth a try
     if has_category(d,s,nspace) return construct_category(d,s,nspace) end
     println("Category $s not found for namespace $nspace")
@@ -244,6 +269,24 @@ end
 
 # Legacy categories may appear without their key, for which
 # the DDLm dictionary may provide a method.
+
+repair_cat(d::DynamicDDLmRC,l::LegacyCategory,nspace) = begin
+    dict = get_dictionary(d,nspace)
+    s = get_name(l)
+    # derive any single missing key
+    keyname = get_keys_for_cat(dict,s)
+    if length(keyname) != 1 return l end
+    keyname = keyname[]
+    if !(has_func(dict,keyname))
+        add_new_func(dict,keyname)
+    end
+    func_code = get_func(dict,keyname)
+    println("Preparing to invoke code for $keyname")
+    keyvals = [Base.invokelatest(func_code,d,p) for p in l]
+    cache_value!(d,nspace,keyname,keyvals)
+    return LoopCategory(l,keyvals)
+end
+
 
 #
 #  Dynamic Category
@@ -280,7 +323,7 @@ derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
         add_new_func(dict,dataname)
     end
     func_code = get_func(dict,dataname)
-    target_loop = get_category(b,find_category(dict,dataname))
+    target_loop = get_category(b,find_category(dict,dataname),nspace)
     [Base.invokelatest(func_code,b,p) for p in target_loop]
 end
 

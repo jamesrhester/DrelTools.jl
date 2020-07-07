@@ -10,7 +10,6 @@ setup() = begin
 end
 
 const db = setup()
-
 #==
 @testset "Test dictionary-defined functions" begin
     # Test that our functions are available
@@ -18,12 +17,11 @@ const db = setup()
     println("$(keys(d.func_defs))")
     @test get_func(d,"symkey")("2_555",db) == 2
 end
-
+==#
 @testset "Test generation of missing keys" begin
     d = get_dictionary(db)
     @test get_func(d,"symequiv")("2_555",drelvector([0.5,0.5,0.5]),db) == drelvector([0.0,1.0,-0.5])
 end
-
 
 @testset "Test single-step derivation" begin
     s = derive(db,"_cell.atomic_mass")
@@ -59,7 +57,6 @@ end
     t = db["_refln.F_calc"]
     @test isapprox(t,[23.993,32.058,6.604],atol=0.01)
 end
-==#
 
 @testset "Test category methods" begin
     m = get_category(db,"model_site")

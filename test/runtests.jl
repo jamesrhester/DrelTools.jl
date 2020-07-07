@@ -20,5 +20,5 @@ setup() = begin
 end
 
 #include("./dynamic.jl")
-include("./expressions.jl")
-#include("./drel_exec.jl")
+#include("./expressions.jl")
+include("./drel_exec.jl")

@@ -82,7 +82,7 @@ a fully-transformed parse tree
                   )
         else
             push!(header.args,
-                  :($(Symbol(c)) = get_category(__datablock,$c))
+                  :($(Symbol(c)) = get_category(__datablock,$c,$(t.namespace)))
                   )
         end
     end
@@ -116,9 +116,9 @@ end
     reverse!(suite.args)
     for (n,c) in t.cat_ids
         if !isnothing(n)
-            push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c,$n))))
+            push!(suite.args,Expr(Symbol("="),Symbol(t.namespace*"_"*String(c)), :(get_category(__datablock,$c,$n))))
         else
-            push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c))))
+            push!(suite.args,Expr(Symbol("="),Symbol(c), :(get_category(__datablock,$c,$(t.namespace)))))
         end
     end
     push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock,$(t.namespace)))))
@@ -194,8 +194,7 @@ end
         id = id[2:end]
         lid = lid[2:end]
     end
-    id = Symbol(id)
-    return id
+    return Symbol(lid)
 end
 
 @inline_rule nspace(t::TreeToJulia,n,colon) = begin
@@ -213,12 +212,13 @@ end
             return Symbol(nid[1]*"_"*String(nid[2]))
         end
     else
-        if nid[1] == t.target_cat
+        if String(nid[1]) == t.target_cat
             return :__packet
-        elseif nid[1] in t.cat_list
-            push!(t.cat_ids,(nothing,nid[1]))
+        elseif String(nid[1]) in t.cat_list
+            println("Found category $(nid[1])")
+            push!(t.cat_ids,(nothing,String(nid[1])))
         end
-        return Symbol(nid[1])
+        return nid[1]
     end
 end
 
