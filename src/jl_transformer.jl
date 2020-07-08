@@ -605,7 +605,14 @@ end
 end
 
 @rule loop_stmt(t::TreeToJulia,args) = begin
-    return Expr(:for, Expr(:(=),args[2], args[4]), args[end])
+    suite = args[end]
+    if length(args) == 7
+        suite = Expr(:block,:($(args[6]) = current_row($(args[2]))),suite.args...)
+    elseif length(args) == 9
+        suite = Expr(:block,:($(args[6]) = current_row($(args[2]))),
+                     Expr(:if, Expr(:call,Symbol(args[7]),args[6], args[8]),:continue),suite.args...)
+    end
+    return Expr(:for, Expr(:(=),args[2], args[4]), suite)
 end
     
 fix_mathops(op,left,right) = begin

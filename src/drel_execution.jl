@@ -5,7 +5,7 @@ export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 
 import DataContainer:get_key_datanames, get_value, get_name
 import DataContainer:get_category, has_category, get_data, get_dictionary
-import DataContainer:select_namespace
+import DataContainer:select_namespace,get_namespaces
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -247,6 +247,11 @@ Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
     throw(KeyError("$s"))
 end
 
+Base.setindex!(d::DynamicDDLmRC,v,s::String) = begin
+    nspace = get_namespaces(d)[]
+    setindex!(d,v,s,nspace)
+end
+
 Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
 
 get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
@@ -266,6 +271,11 @@ get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
     if has_category(d,s,nspace) return construct_category(d,s,nspace) end
     println("Category $s not found for namespace $nspace")
     return missing
+end
+
+get_category(d::DynamicDDLmRC,s::String) = begin
+    nspace = get_namespaces(d)[]
+    get_category(d,s,nspace)
 end
 
 # Legacy categories may appear without their key, for which

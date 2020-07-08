@@ -9,6 +9,7 @@ const _drel_grammar_spec = raw"""
     COMMA : ","
     COLON : ":"
     SEMI : ";"
+    BAR : "|"
     PERIOD : "."
     PWR : "**"
     MULT : "*"
@@ -73,7 +74,7 @@ const _drel_grammar_spec = raw"""
     literal : SHORTSTRING | LONGSTRING | INTEGER | HEXINT | OCTINT | BININT | NULL | MISSING | real | imaginary 
     
     ident : ID 
-    nspace : ID COLON 
+    nspace : ID BAR 
     nident : [ nspace ] ident 
     
     enclosure : parenth_form | list_display | table_display 
@@ -129,7 +130,7 @@ const _drel_grammar_spec = raw"""
     for_stmt : FOR  (id_list | "[" id_list "]")  IN  expression_list  suite 
     id_list : [id_list  ","]  ident 
     
-    loop_stmt :  LOOP ident AS nident [":"  ident  [restricted_comp_operator  ident]] suite 
+    loop_stmt :  LOOP ident AS nident [ COLON  ident  [restricted_comp_operator  ident]] suite 
     do_stmt : DO ident  "=" expression  ","  expression  [","  expression] suite 
     repeat_stmt : REPEAT suite 
     with_stmt : WITH  ident  AS  nident  suite 

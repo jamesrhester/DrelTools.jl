@@ -54,6 +54,7 @@ Delimiters are discussed in the context of their use, below.
     COMMA = ","
     COLON = ":"
     SEMI = ";"
+    BAR = "|"
 
 Operators
 ~~~~~~~~~
@@ -197,7 +198,7 @@ an action to.::
 An identifier can be prefixed by a namespace to allow disambiguation where
 several dictionaries are available in the context.::
 
-    nspace = ID COLON ;
+    nspace = ID BAR ;
 
 Namespaces only make sense in certain contexts, so we provide a production
 for those cases.::
@@ -440,8 +441,9 @@ of particular data names within `a` using attribute access
 (`a.c`). The form `Loop a as b : m` will additionally assign a
 numerical row index to `m` within `suite`. The form `Loop a as b: m
 cond n` will only perform the iteration for a particular row if the
-condition `m cond n` is true. TODO: do we really need sequence
-numbers in loops given that there is no canonical order?
+condition `m cond n` is true. Sequence numbers are useful in situations
+where a nested loop loops over the same category as the outer loop,
+so that identity can be compared.
 
 The ``nident`` cannot be replaced with a more liberal token (for example,
 ``primary`` or ``call``) as it introduces reduce conflicts in the syntax:
@@ -450,7 +452,7 @@ a function call?
 
 ::
 
-    loop_stmt =  LOOP ident AS nident [":"  ident  [restricted_comp_operator  ident]] suite ;
+    loop_stmt =  LOOP ident AS nident [ COLON  ident  [restricted_comp_operator  ident]] suite ;
 
 Do statements perform simple loops in the same way as FOR statements. ::
 
