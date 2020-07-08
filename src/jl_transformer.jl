@@ -212,6 +212,7 @@ end
             return Symbol(nid[1]*"_"*String(nid[2]))
         end
     else
+        if typeof(nid[1]) == Expr return nid[1] end  #e.g. 2pi
         if String(nid[1]) == t.target_cat
             return :__packet
         elseif String(nid[1]) in t.cat_list

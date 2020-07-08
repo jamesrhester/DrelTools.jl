@@ -111,6 +111,9 @@ are cached for efficiency and appear as if they were present in the
 original file after they have been calculated once.  To remove these
 values, the cache should be emptied.
 
+Values can be distributed between namespaces, each of which has a
+corresponding dictionary.
+
 ==#
 
 abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
@@ -143,6 +146,8 @@ DynamicDDLmRC(r::AbstractRelationalContainer) = begin
     DynamicDDLmRC(r,get_dicts(r),d)
 end
 
+get_namespaces(d::DynamicDDLmRC) = collect(keys(d.value_cache))
+
 empty_cache!(d::DynamicDDLmRC) = begin
     for k in keys(d.value_cache)
         empty!(d.value_cache[k])
@@ -150,24 +155,23 @@ empty_cache!(d::DynamicDDLmRC) = begin
 end
 
 cache_value!(d::DynamicDDLmRC,name::String,value) = begin
-    nspace = first(d.value_cache).first
-    cache_value!(d,nspace,name,value)
+    nspace = get_namespaces(d)[]
+    cache_value!(d,nspace,lowercase(name),value)
 end
 
 cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
-    if haskey(d.value_cache[nspace],name)
+    if haskey(d.value_cache[nspace],lowercase(name))
         println("WARNING: overwriting previously cached value")
         println("Was: $(d.value_cache[nspace][name])")
         println("Now: $value")
     end
-    d.value_cache[nspace][name] = value
+    d.value_cache[nspace][lowercase(name)] = value
 end
 
-cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = d.value_cache[nspace][name][index] = value
+cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = d.value_cache[nspace][lowercase(name)][index] = value
 
 cache_value!(d::DynamicDDLmRC,name::String,index::Int,value) = begin
-    @assert length(d.value_cache) == 1
-    cache_value!(d,first(d.value_cache).first,name,index,value)
+    cache_value!(d,get_namespaces(d)[],name,index,value)
 end
 
 cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
@@ -176,7 +180,7 @@ cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
     end
 end
 
-get_dictionary(d::DynamicDDLmRC) = first(d.dict).second
+get_dictionary(d::DynamicDDLmRC) = d.dict[get_namespaces(d)[]]
 
 get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 
@@ -185,11 +189,6 @@ get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 
 get_data(d::DynamicDDLmRC) = d
 
-get_namespace(d::DynamicDDLmRC) = begin
-    @assert length(d.dict) == 1
-    return first(keys(d.dict))
-end
-
 select_namespace(d::DynamicDDLmRC,nspace) = begin
     DynamicDDLmRC(select_namespace(d.data,nspace),Dict(nspace=>d.dict[nspace]),
                   Dict(nspace=>d.value_cache[nspace]))
@@ -197,10 +196,11 @@ end
 
 Base.keys(d::DynamicDDLmRC) = begin
     real_keys = keys(d.data)
-    if length(d.value_cache) == 1   #no need for namespaces
-        vc_keys = (keys(first(d.value_cache).second),)
+    nspaces = get_namespaces(d)
+    if length(nspaces) == 1   #no need for namespaces
+        vc_keys = (keys(d.value_cache[nspaces[]]),)
     else
-        vc_keys = (string.(n*"‡",keys(d.value_cache[n])) for n in keys(d.value_cache))
+        vc_keys = (string.(n*"‡",keys(d.value_cache[n])) for n in nspaces)
     end
     Iterators.flatten((real_keys,vc_keys...))
 end
@@ -227,26 +227,27 @@ Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
     if occursin('‡', s)
         nspace,realname = split(s,'‡')
     else
-        nspace = get_namespace(d) 
+        nspace = get_namespaces(d)[] 
     end
     getindex(d,realname,nspace)
 end
 
 Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
-    if haskey(d.value_cache[nspace],s) return d.value_cache[nspace][s] end
+    ls = lowercase(s)
+    if haskey(d.value_cache[nspace],ls) return d.value_cache[nspace][ls] end
     m = derive(d,s,nspace)
     accept = any(x->!ismissing(x),m)
     if !accept
         m = get_default(d,s,nspace)
     end
     if any(x->!ismissing(x),m)
-        d[lowercase(s)]= m
+        setindex!(d,m,s,nspace)
         return m
     end
     throw(KeyError("$s"))
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][s]=v
+Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
 
 get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
     dict = get_dictionary(d,nspace)
@@ -304,7 +305,7 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
         return [def_vals for i in target_loop]
     end
     # perhaps we can lookup up a default value?
-    m = lookup_default(dict,s,d)
+    m = lookup_default(dict,s,db)
     if !ismissing(m) return m end
     # is there a derived default available?
     if !haskey(dict.def_meths,(s,"enumeration.default"))
@@ -325,6 +326,11 @@ derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
     func_code = get_func(dict,dataname)
     target_loop = get_category(b,find_category(dict,dataname),nspace)
     [Base.invokelatest(func_code,b,p) for p in target_loop]
+end
+
+derive(b::DynamicDDLmRC,dataname::String) = begin
+    nspaces = get_namespaces(b)
+    derive(b,dataname,nspaces[])
 end
 
 #== Per packet derivation
@@ -399,6 +405,12 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
     println(debug_info)
     return Base.invokelatest(func_code,block,cp)
 end
+
+get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
+    nspace = get_namespaces(block)[]
+    get_default(block,cp,obj,nspace)
+end
+
 
 add_new_func(d::abstract_cif_dictionary,s::String) = begin
     t = get_func_text(d,s,"Evaluation")
