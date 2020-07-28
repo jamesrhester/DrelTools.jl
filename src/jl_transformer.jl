@@ -78,11 +78,11 @@ a fully-transformed parse tree
     for (n,c) in t.cat_ids
         if !isnothing(n)
             push!(header.args,
-                  :($(Symbol(String(n)*"_"*String(c))) = get_category(__datablock,$c,$n))
+                  :($(Symbol(String(n)*"_"*String(c))) = get_packets(get_category(__datablock,$c,$n)))
                   )
         else
             push!(header.args,
-                  :($(Symbol(c)) = get_category(__datablock,$c,$(t.namespace)))
+                  :($(Symbol(c)) = get_packets(get_category(__datablock,$c,$(t.namespace))))
                   )
         end
     end
@@ -102,9 +102,7 @@ a fully-transformed parse tree
             push!(returnexpr.args,:($(String(c))=>$(Symbol("__"+String(c)))))
         end
         push!(header.args,:(return $returnexpr))
-        final_expr = quote
-            (__datablock::DynamicRelationalContainer) -> $header
-        end
+        final_expr = :((__datablock::DynamicRelationalContainer) -> $header)
     end
     return final_expr
 end

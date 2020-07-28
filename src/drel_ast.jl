@@ -342,12 +342,14 @@ that is forbidden), and no use of the "local" keyword as we do not do
 that when generating Julia code. 
 
 The ast node passed to the routine should begin with a function
-definition ==#
+definition, or else a block with line number ==#
 
-fix_scope(ast_node) = begin
-    if !(((ast_node.head == :(=) && ast_node.args[1].head == :call)||
-         (ast_node.head == :-> && ast_node.args[1].head == :tuple))
-         && ast_node.args[2].head == :block) 
+fix_scope(node) = begin
+    # go down until a function definition is found
+    ast_node = node
+    if ast_node.head == :block ast_node = ast_node.args[2] end
+    if !((ast_node.head == :-> && ast_node.args[1].head == :tuple)||
+         (ast_node.head == :(=) && ast_node.args[1].head == :call))
         return ast_node
     end
     enclosing = :()

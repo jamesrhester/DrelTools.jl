@@ -104,27 +104,31 @@ Because we want to allow recursive derivation when encountering property
 access into a packet, we need to provide the datablock as an additional
 argument.  
 
+Also take into account namespaces, which means we have to obtain the
+dictionary via the category, which holds the relevant dictionary.
+
 ==#
 
 drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalContainer) = begin
     source_cat = get_category(cp)
     catname = get_name(source_cat)
-    dict = get_dictionary(datablock)
-    dataname = get_by_cat_obj(dict,(catname,obj))["_definition.id"][1]
+    dict = get_dictionary(cp)
+    namespace = get_dic_namespace(dict)
+    dataname = find_name(dict,catname,obj)
     result = missing
     rowno = getfield(cp,:id)
     #println("Looking for property $obj in $(source_cat.data_ptr)")
     try
         result = getproperty(cp,Symbol(obj))  #non-deriving form
     catch AttributeError
-        if !haskey(datablock,dataname)
+        if !haskey(datablock,dataname,namespace)
             # populate the column with 'missing' values
             println("$obj is missing, adding missing values")
             # explicitly set type otherwise DataFrames thinks it is Missing only
             new_array = Array{Union{Missing,Any},1}(missing,length(source_cat))
-            cache_value!(datablock, dataname, new_array)
+            cache_value!(datablock, dataname, new_array,namespace)
         else
-            result = datablock[dataname][rowno]
+            result = getindex(datablock,dataname,namespace)[rowno]
         end
     end
     if !ismissing(result)
@@ -136,7 +140,7 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
         m = get_default(datablock,cp,Symbol(obj))
     end
     # store the cached value
-    cache_value!(datablock,dataname,rowno, m)
+    cache_value!(datablock,namespace,dataname,rowno, m)
     return m
 end
 

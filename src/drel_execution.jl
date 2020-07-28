@@ -48,9 +48,8 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     #println("Proto-Julia code: ")
     #println(proto)
     #println("Target category aliased to $tc_alias")
-    set_categories = get_set_categories(dict)
     parsed = ast_fix_indexing(proto,get_categories(dict),dict)
-    println(parsed)
+    #println(parsed)
     if !transformer.is_category   #not relevant for category methods
         # catch implicit matrix assignments
         container_type = dict[dataname]["_type.container"][1]
@@ -61,7 +60,8 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
         end
     end
     parsed = fix_scope(parsed)
-    parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
+    set_categories = get_set_categories(dict)
+    #parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     #println("####\n    Assigning types\n####\n")
     parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats=get_categories(dict))
 end
@@ -190,7 +190,12 @@ get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 get_data(d::DynamicDDLmRC) = d
 
 select_namespace(d::DynamicDDLmRC,nspace) = begin
-    DynamicDDLmRC(select_namespace(d.data,nspace),Dict(nspace=>d.dict[nspace]),
+    filtered_data = TypedDataSource(Dict{String,Any}(),d.dict[nspace])
+    try
+        filtered_data = select_namespace(d.data,nspace)
+    catch KeyError
+    end
+    DynamicDDLmRC(filtered_data,Dict(nspace=>d.dict[nspace]),
                   Dict(nspace=>d.value_cache[nspace]))
 end
 
@@ -205,6 +210,14 @@ Base.keys(d::DynamicDDLmRC) = begin
     Iterators.flatten((real_keys,vc_keys...))
 end
 
+"""
+Namespace-aware version of `keys`
+"""
+Base.keys(d::DynamicDDLmRC,nspace::String) = begin
+    f = select_namespace(d,nspace)
+    Iterators.flatten((keys(f.data),keys(f.value_cache[nspace])))
+end
+
 Base.show(io::IO,d::DynamicDDLmRC) = begin
     show(io,d.data)
     show(io,d.value_cache)
@@ -212,6 +225,10 @@ end
 
 Base.haskey(d::DynamicDDLmRC,s::String) = begin
     return s in keys(d)
+end
+
+Base.haskey(d::DynamicDDLmRC,s::String,n::String) = begin
+    return s in keys(d,n)
 end
 
 """
@@ -307,16 +324,19 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
     dict = get_dictionary(db,nspace)
     def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
-    if !has_category(db,cat_name,nspace)
+    if !has_category(db,cat_name,nspace) && get_cat_class(dict,cat_name) != "Set"
         throw(error("Cannot provide default value for $s,category $cat_name does not exist for namespace $nspace"))
     end
     target_loop = get_category(db,cat_name,nspace)
     if !ismissing(def_vals)
         return [def_vals for i in target_loop]
     end
-    # perhaps we can lookup up a default value?
-    m = lookup_default(dict,s,db)
-    if !ismissing(m) return m end
+    # perhaps we can lookup a default value?
+    m = lookup_default(dict,s,target_loop)
+    if !ismissing(m)
+        println("Result of lookup for $s: $m")
+        return m
+    end
     # is there a derived default available?
     if !haskey(dict.def_meths,(s,"enumeration.default"))
         add_definition_func!(dict,s)
