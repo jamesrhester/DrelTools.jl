@@ -199,14 +199,13 @@ select_namespace(d::DynamicDDLmRC,nspace) = begin
                   Dict(nspace=>d.value_cache[nspace]))
 end
 
+"""
+All keys returned, even if duplicated
+"""
 Base.keys(d::DynamicDDLmRC) = begin
     real_keys = keys(d.data)
     nspaces = get_namespaces(d)
-    if length(nspaces) == 1   #no need for namespaces
-        vc_keys = (keys(d.value_cache[nspaces[]]),)
-    else
-        vc_keys = (string.(n*"‡",keys(d.value_cache[n])) for n in nspaces)
-    end
+    vc_keys = (keys(d.value_cache[n]) for n in nspaces)
     Iterators.flatten((real_keys,vc_keys...))
 end
 
@@ -223,6 +222,9 @@ Base.show(io::IO,d::DynamicDDLmRC) = begin
     show(io,d.value_cache)
 end
 
+"""
+Return true if any instance found of `s` in `d`
+"""
 Base.haskey(d::DynamicDDLmRC,s::String) = begin
     return s in keys(d)
 end
@@ -239,14 +241,16 @@ As we have namespaces, getindex only works if the namespace is included
 in `s`
 """
 Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
-    if haskey(d.data,s) return d.data[s] end
-    realname = s
-    if occursin('‡', s)
-        nspace,realname = split(s,'‡')
-    else
-        nspace = get_namespaces(d)[] 
+    namespaces = get_namespaces(d)
+    for n in namespaces
+        fd = select_namespace(d,n)
+        if haskey(fd.data,s) return fd.data[s] end
+        try
+            return getindex(d,s,n)
+        catch KeyError
+        end
     end
-    getindex(d,realname,nspace)
+    throw(KeyError(s))
 end
 
 Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
@@ -290,9 +294,18 @@ get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
     return missing
 end
 
+"""
+If no namespace is provided, try and find one based on the name
+"""
 get_category(d::DynamicDDLmRC,s::String) = begin
-    nspace = get_namespaces(d)[]
-    get_category(d,s,nspace)
+    nspace = get_namespaces(d)
+    if length(nspace) == 1 return get_category(d,s,nspace[]) end
+    for n in nspace
+        if has_category(d,s,n)
+            return get_category(d,s,n)
+        end
+    end
+    throw(KeyError(s))
 end
 
 # Legacy categories may appear without their key, for which

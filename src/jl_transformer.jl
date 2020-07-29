@@ -78,11 +78,11 @@ a fully-transformed parse tree
     for (n,c) in t.cat_ids
         if !isnothing(n)
             push!(header.args,
-                  :($(Symbol(String(n)*"_"*String(c))) = get_packets(get_category(__datablock,$c,$n)))
+                  :($(Symbol(String(n)*"ѫ"*String(c))) = get_packets(get_category(__datablock,$c,$n)))
                   )
         else
             push!(header.args,
-                  :($(Symbol(c)) = get_packets(get_category(__datablock,$c,$(t.namespace))))
+                  :($(Symbol(c)) = get_packets(get_category(__datablock,$c)))
                   )
         end
     end
@@ -207,7 +207,7 @@ end
             return :__packet
         else
             push!(t.cat_ids,(nid[1],String(nid[2])))
-            return Symbol(nid[1]*"_"*String(nid[2]))
+            return Symbol(nid[1]*"ѫ"*String(nid[2]))
         end
     else
         if typeof(nid[1]) == Expr return nid[1] end  #e.g. 2pi
@@ -603,6 +603,9 @@ end
 end
 
 @rule loop_stmt(t::TreeToJulia,args) = begin
+    if !('ѫ' in String(args[4]))
+        push!(t.cat_ids,(nothing,String(args[4])))  #must be a category
+    end
     suite = args[end]
     if length(args) == 7
         suite = Expr(:block,:($(args[6]) = current_row($(args[2]))),suite.args...)
