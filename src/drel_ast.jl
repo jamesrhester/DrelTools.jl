@@ -50,7 +50,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             ixpr.args = [ast_assign_types(x,in_scope_dict,lhs=lh,cifdic=cifdic,all_cats=all_cats) for x in ast_node.args]
             return ixpr
         elseif lhs != nothing && ast_node.head == :(::)
-            if ast_node.args[2] in(:CifCategory,:CatPacket)
+            if ast_node.args[2] == :(Union{CifCategory,CatPacket})
                 in_scope_dict[lhs] = String(ast_node.args[1])
             end
             ixpr.head = ast_node.head

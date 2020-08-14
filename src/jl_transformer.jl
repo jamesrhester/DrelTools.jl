@@ -48,7 +48,7 @@ TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict()) = begin
         is_category = true
     else
         target_cat = find_category(data_dict,dataname)
-        target_object = data_dict[dataname]["_name.object_id"][1]
+        target_object = data_dict[dataname][:name][!,:object_id][]
     end
     func_cat,func_list = get_dict_funcs(data_dict)
     is_func = target_cat == func_cat
@@ -75,6 +75,7 @@ a fully-transformed parse tree
 @inline_rule input(t::TreeToJulia,arg) = begin
     if t.is_func return arg end
     header = Expr(:block,:(__dict=get_dictionary(__datablock,$(t.namespace))))
+    println("Final category list: $(t.cat_ids)")
     for (n,c) in t.cat_ids
         if !isnothing(n)
             push!(header.args,
@@ -595,7 +596,7 @@ end
 @inline_rule with_stmt(t::TreeToJulia,_,id1,_,id2,suite) = begin
     type_annot = :Any
     if id2 != :__packet
-        return :($id1 = $id2::CifCategory;$suite)
+        return :($id1 = $id2::Union{CifCategory,CatPacket};$suite)
     else
         t.target_category_alias = id1
         return :($id1 = $id2;$suite)

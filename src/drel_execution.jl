@@ -21,10 +21,9 @@ const drel_parser = Serialization.deserialize(joinpath(@__DIR__,"..","deps","dre
 # Parse and output proto-Julia code using Lerche
 
 get_drel_methods(cd::abstract_cif_dictionary) = begin
-    has_meth = [n for n in cd if "_method.expression" in keys(n) && get(n,"_definition.scope",["Item"])[1] != "Category"]
-    meths = [(n["_definition.id"][1],get_loop(n,"_method.expression")) for n in has_meth]
-    println("Found $(length(meths)) methods")
-    return meths
+    has_meth = cd[:method][cd[:method][!,:expression] .!= nothing,(:expression,:master_id)]
+    println("Found $(length(has_meth)) methods")
+    return has_meth    #category methods as well
 end
 
 #== This method creates Julia code from dREL code by
@@ -43,7 +42,7 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     tree = Lerche.parse(drel_parser,drel_text)
     #println("Rule dict: $(get_rule_dict())")
     transformer = TreeToJulia(dataname,dict)
-    proto = transform(transformer,tree)
+    proto = Lerche.transform(transformer,tree)
     tc_alias = transformer.target_category_alias
     #println("Proto-Julia code: ")
     #println(proto)
@@ -52,7 +51,7 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     #println(parsed)
     if !transformer.is_category   #not relevant for category methods
         # catch implicit matrix assignments
-        container_type = dict[dataname]["_type.container"][1]
+        container_type = dict[dataname][:type][!,:container][]
         is_matrix = (container_type == "Matrix" || container_type == "Array")
         ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
         if ft == nothing && !transformer.is_func
@@ -70,18 +69,17 @@ end
 ==#
 get_func_text(dict::abstract_cif_dictionary,dataname::String,meth_type::String) =  begin
     full_def = dict[dataname]
-    func_text = get_loop(full_def,"_method.expression")
+    func_text = full_def[:method]
     if size(func_text,2) == 0   #nothing
         return ""
     end
     # TODO: allow multiple methods
-    eval_meths = func_text[func_text[!,Symbol("_method.purpose")] .== meth_type,:]
+    eval_meths = func_text[func_text[!,:purpose] .== meth_type,:]
     println("Meth size for $dataname is $(size(eval_meths))")
     if size(eval_meths,1) == 0
         return ""
     end
-    
-    eval_meth = eval_meths[1,Symbol("_method.expression")]
+    eval_meth = eval_meths[!,:expression][]
 end
 
 define_dict_funcs(c::abstract_cif_dictionary) = begin
@@ -89,11 +87,10 @@ define_dict_funcs(c::abstract_cif_dictionary) = begin
     func_cat,all_funcs = get_dict_funcs(c)
     for f in all_funcs
         println("Now processing $f")         
-        full_def = get_by_cat_obj(c,(func_cat,f))
-        entry_name = full_def["_definition.id"][1]
-        full_name = lowercase(full_def["_name.object_id"][1])
-        func_text = get_loop(full_def,"_method.expression")
-        func_text = func_text[Symbol("_method.expression")][1]
+        full_def = c[find_name(c,func_cat,f)]
+        entry_name = full_def[:definition].id[]
+        full_name = lowercase(full_def[:name].object_id[])
+        func_text = full_def[:method][!,:expression][1]
         println("Function text: $func_text")
         result = make_julia_code(func_text,entry_name,c)
         println("Transformed text: $result")
@@ -277,7 +274,7 @@ Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspa
 
 get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
     dict = get_dictionary(d,nspace)
-    cat_type = get(dict[s],"_definition.class",["Datum"])[]
+    cat_type = get_cat_class(dict,s)
     if cat_type == "Set"   #an empty category is good enough
         println("Building empty category $s")
         return construct_category(d,s,nspace)
@@ -346,7 +343,7 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
     end
     # perhaps we can lookup a default value?
     m = lookup_default(dict,s,target_loop)
-    if !ismissing(m)
+    if any(x->!ismissing(x),m)
         println("Result of lookup for $s: $m")
         return m
     end
@@ -355,7 +352,14 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
         add_definition_func!(dict,s)
     end
     func_code = get_def_meth(dict,s,"enumeration.default")
-    return [Base.invokelatest(func_code,db,p) for p in target_loop]
+    try
+        result = [Base.invokelatest(func_code,db,p) for p in target_loop]
+    catch e
+        println("$(typeof(e)) when executing default dREL for $s/enumeration.default, should not happen")
+        println("Function text: $(get_def_meth_txt(dict,s,"enumeration.default"))")
+        rethrow(e)
+    end
+    return result
 end
 
 """
@@ -368,7 +372,13 @@ derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
     end
     func_code = get_func(dict,dataname)
     target_loop = get_category(b,find_category(dict,dataname),nspace)
-    [Base.invokelatest(func_code,b,p) for p in target_loop]
+    try
+        [Base.invokelatest(func_code,b,p) for p in target_loop]
+    catch e
+        println("Warning: error $(typeof(e)) in dREL method for $dataname, should never happen.")
+        println("Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))")
+        rethrow(e)
+    end
 end
 
 derive(b::DynamicDDLmRC,dataname::String) = begin
@@ -391,7 +401,13 @@ derive(p::CatPacket,obj::String,db) = begin
         add_new_func(dict,dataname)
     end
     func_code = get_func(dict,dataname)
-    Base.invokelatest(func_code,db,p)
+    try
+        Base.invokelatest(func_code,db,p)
+    catch e
+        println("$(typeof(e)) when evaluating $cat.$obj, should not happen")
+        println("Function text: $(get_func_text(dict,dataname))")
+        rethrow(e)
+    end
 end
 
 #==
@@ -529,19 +545,19 @@ current packet is used to index into the table
 ==#
 
 lookup_default(dict::abstract_cif_dictionary,dataname::String,cp::CatPacket) = begin
-    index_name = get(dict[dataname],"_enumeration.def_index_id",[missing])[1]
-    if ismissing(index_name) return missing
-    end
+    definition = dict[dataname][:enumeration]
+    index_name = :def_index_id in propertynames(definition) ? definition[!,:def_index_id][] : missing
+    if ismissing(index_name) return missing end
     object_name = find_object(dict,index_name)
     # Note non-deriving form of getproperty
     println("Looking for $object_name in $(get_name(getfield(cp,:source_cat)))")
     current_val = getproperty(cp,Symbol(object_name))
     print("Indexing $dataname using $current_val to get")
     # Now index into the information
-    indexlist = dict[dataname]["_enumeration_default.index"]
+    indexlist = dict[dataname][:enumeration_default][!,:index]
     pos = indexin([current_val],indexlist)
     if pos[1] == nothing return missing end
-    as_string = dict[dataname]["_enumeration_default.value"][pos[1]]
+    as_string = dict[dataname][:enumeration_default][!,:value][pos[1]]
     println(" $as_string")
     return convert_to_julia(dict,dataname,[as_string])[1]
 end
