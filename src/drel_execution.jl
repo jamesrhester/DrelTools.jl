@@ -396,7 +396,7 @@ derive(p::CatPacket,obj::String,db) = begin
     d = get_category(p)
     dict = get_dictionary(d)
     cat = get_name(d)
-    dataname = get_by_cat_obj(dict,(cat,obj))["_definition.id"][1]
+    dataname = find_name(dict,cat,obj)
     if !(has_func(dict,dataname))
         add_new_func(dict,dataname)
     end
@@ -434,7 +434,7 @@ derive_category(b::DynamicRelationalContainer,cat::String,nspace) = begin
     func_code = get_func(dict,cat)
     col_vals = Base.invokelatest(func_code,b)
     # Convert to canonical names
-    col_vals = (lowercase(get_by_cat_obj(dict,(cat,x.first))["_definition.id"][1]) => x.second for x in col_vals)
+    col_vals = (lowercase(find_name(dict,cat,x.first)) => x.second for x in col_vals)
     for p in col_vals
         cache_value!(b,nspace,p.first,p.second)
     end
@@ -444,7 +444,7 @@ end
 get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) = begin
     dict = get_dictionary(block,nspace)
     mycat = get_name(get_category(cp))
-    dataname = get_by_cat_obj(dict,(mycat,String(obj)))["_definition.id"][1]
+    dataname = find_name(dict,mycat,String(obj))
     def_val = CrystalInfoFramework.get_default(dict,dataname)
     if !ismissing(def_val)
         return def_val

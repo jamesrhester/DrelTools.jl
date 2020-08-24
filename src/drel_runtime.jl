@@ -120,13 +120,16 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     #println("Looking for property $obj in $(source_cat.data_ptr)")
     try
         result = getproperty(cp,Symbol(obj))  #non-deriving form
-    catch AttributeError
+    catch e  #TODO define our own error
+        println("Property $obj not present in $catname (error $(typeof(e)))")
+        #println("$(catch_backtrace())")
+        println("Continuing with deriving version")
         if !haskey(datablock,dataname,namespace)
             # populate the column with 'missing' values
             println("$obj is missing, adding missing values")
             # explicitly set type otherwise DataFrames thinks it is Missing only
             new_array = Array{Union{Missing,Any},1}(missing,length(source_cat))
-            cache_value!(datablock, dataname, new_array,namespace)
+            cache_value!(datablock, namespace, dataname, new_array)
         else
             result = getindex(datablock,dataname,namespace)[rowno]
         end
