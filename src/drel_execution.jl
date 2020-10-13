@@ -1,7 +1,8 @@
 #== This module defines functions for executing dREL code ==#
-export dynamic_block, define_dict_funcs, derive, get_func_text
+export dynamic_block, define_dict_funcs, derive
 export add_definition_func, empty_cache!
 export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
+export find_namespace
 
 import DataContainer:get_key_datanames, get_value, get_name
 import DataContainer:get_category, has_category, get_data, get_dictionary
@@ -37,21 +38,28 @@ end
 (7) turning set categories into packets
 (8) Assigning types to any dictionary items for which this is known
 ==#
+"""
+make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary; reserved=[])
 
-make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary) = begin
+Define a Julia method from dREL code contained in `drel_text` which calculates the value of `dataname`
+defined in `dict`. All category names in `dict` and any additional names in `reserved` are recognised
+as categories.
+"""
+make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary; reserved=String[]) = begin
     tree = Lerche.parse(drel_parser,drel_text)
     #println("Rule dict: $(get_rule_dict())")
-    transformer = TreeToJulia(dataname,dict)
+    transformer = TreeToJulia(dataname,dict,extra_cats = reserved)
     proto = Lerche.transform(transformer,tree)
     tc_alias = transformer.target_category_alias
-    #println("Proto-Julia code: ")
-    #println(proto)
+    println("Proto-Julia code: ")
+    println(proto)
     #println("Target category aliased to $tc_alias")
-    parsed = ast_fix_indexing(proto,get_categories(dict),dict)
+    unique!(append!(reserved,get_categories(dict)))
+    parsed = ast_fix_indexing(proto,reserved,dict)
     #println(parsed)
     if !transformer.is_category   #not relevant for category methods
         # catch implicit matrix assignments
-        container_type = dict[dataname][:type][!,:container][]
+        container_type = get_container_type(dict,dataname)
         is_matrix = (container_type == "Matrix" || container_type == "Array")
         ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
         if ft == nothing && !transformer.is_func
@@ -62,24 +70,7 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     set_categories = get_set_categories(dict)
     #parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     #println("####\n    Assigning types\n####\n")
-    parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats=get_categories(dict))
-end
-
-#== Extract the dREL text from the dictionary, if any
-==#
-get_func_text(dict::abstract_cif_dictionary,dataname::String,meth_type::String) =  begin
-    full_def = dict[dataname]
-    func_text = full_def[:method]
-    if size(func_text,2) == 0   #nothing
-        return ""
-    end
-    # TODO: allow multiple methods
-    eval_meths = func_text[func_text[!,:purpose] .== meth_type,:]
-    println("Meth size for $dataname is $(size(eval_meths))")
-    if size(eval_meths,1) == 0
-        return ""
-    end
-    eval_meth = eval_meths[!,:expression][]
+    parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats = reserved)
 end
 
 define_dict_funcs(c::abstract_cif_dictionary) = begin
@@ -145,6 +136,22 @@ end
 
 get_namespaces(d::DynamicDDLmRC) = collect(keys(d.value_cache))
 
+"""
+find_namespace(d::DynamicDDLmRC,dataname)
+
+Find a single namespace in `d` that knows about `dataname`. If no such namespace exists,
+an error is thrown
+"""
+find_namespace(d::DynamicDDLmRC,dataname) = begin
+    nspaces = get_namespaces(d)
+    if length(nspaces) == 1 return nspaces[] end
+    potentials  = [n for n in nspaces if haskey(d.dict[n],dataname)]
+    if length(potentials) > 1
+        throw(error("Name appears in more than one namespace: $dataname. Please specify namespace."))
+    elseif length(potentials) == 0 throw(KeyError(dataname)) end
+    potentials[]
+end
+
 empty_cache!(d::DynamicDDLmRC) = begin
     for k in keys(d.value_cache)
         empty!(d.value_cache[k])
@@ -152,23 +159,28 @@ empty_cache!(d::DynamicDDLmRC) = begin
 end
 
 cache_value!(d::DynamicDDLmRC,name::String,value) = begin
-    nspace = get_namespaces(d)[]
+    nspace = find_namespace(d,name)
     cache_value!(d,nspace,lowercase(name),value)
 end
 
 cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
     if haskey(d.value_cache[nspace],lowercase(name))
-        println("WARNING: overwriting previously cached value")
-        println("Was: $(d.value_cache[nspace][name])")
-        println("Now: $value")
+        println("WARNING: overwriting previously cached value for $name")
+        println("Old length: $(length(d.value_cache[nspace][name]))")
+        println("New length: $(length(value))")
     end
     d.value_cache[nspace][lowercase(name)] = value
 end
 
-cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = d.value_cache[nspace][lowercase(name)][index] = value
+# Don't bother caching missing values
+cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = begin
+    if !ismissing(value)
+        d.value_cache[nspace][lowercase(name)][index] = value
+    end
+end
 
 cache_value!(d::DynamicDDLmRC,name::String,index::Int,value) = begin
-    cache_value!(d,get_namespaces(d)[],name,index,value)
+    cache_value!(d,find_namespace(d,name),name,index,value)
 end
 
 cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
@@ -190,7 +202,8 @@ select_namespace(d::DynamicDDLmRC,nspace) = begin
     filtered_data = TypedDataSource(Dict{String,Any}(),d.dict[nspace])
     try
         filtered_data = select_namespace(d.data,nspace)
-    catch KeyError
+    catch e
+        if !(e isa KeyError) rethrow() end
     end
     DynamicDDLmRC(filtered_data,Dict(nspace=>d.dict[nspace]),
                   Dict(nspace=>d.value_cache[nspace]))
@@ -238,22 +251,23 @@ As we have namespaces, getindex only works if the namespace is included
 in `s`
 """
 Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
-    namespaces = get_namespaces(d)
-    for n in namespaces
-        fd = select_namespace(d,n)
-        if haskey(fd.data,s) return fd.data[s] end
-        try
-            return getindex(d,s,n)
-        catch KeyError
-        end
-    end
-    throw(KeyError(s))
+    n = find_namespace(d,s)
+    return d[s,n]
 end
 
+"""
+d[s,nspace]
+
+Return from `d` the value of dataname `s` from namespace `nspace`, with
+derivation of missing values.
+"""
 Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
     ls = lowercase(s)
-    if haskey(d.value_cache[nspace],ls) return d.value_cache[nspace][ls] end
+    small_r = select_namespace(d,nspace)
+    if haskey(small_r.data,ls) return small_r.data[ls] end
+    if haskey(small_r.value_cache[nspace],ls) return small_r.value_cache[nspace][ls] end
     m = derive(d,s,nspace)
+    if ismissing(m) throw(KeyError("$s")) end
     accept = any(x->!ismissing(x),m)
     if !accept
         m = get_default(d,s,nspace)
@@ -266,7 +280,7 @@ Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
 end
 
 Base.setindex!(d::DynamicDDLmRC,v,s::String) = begin
-    nspace = get_namespaces(d)[]
+    nspace = find_namespace(d,s)
     setindex!(d,v,s,nspace)
 end
 
@@ -274,9 +288,7 @@ Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspa
 
 get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
     dict = get_dictionary(d,nspace)
-    cat_type = get_cat_class(dict,s)
-    if cat_type == "Set"   #an empty category is good enough
-        println("Building empty category $s")
+    if is_set_category(dict,s)   #an empty category is good enough
         return construct_category(d,s,nspace)
     end
     println("Searching for category $s")
@@ -295,14 +307,8 @@ end
 If no namespace is provided, try and find one based on the name
 """
 get_category(d::DynamicDDLmRC,s::String) = begin
-    nspace = get_namespaces(d)
-    if length(nspace) == 1 return get_category(d,s,nspace[]) end
-    for n in nspace
-        if has_category(d,s,n)
-            return get_category(d,s,n)
-        end
-    end
-    throw(KeyError(s))
+    n = find_namespace(d,s)
+    get_category(d,s,n)
 end
 
 # Legacy categories may appear without their key, for which
@@ -342,36 +348,47 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
         return [def_vals for i in target_loop]
     end
     # perhaps we can lookup a default value?
-    m = lookup_default(dict,s,target_loop)
+    m = all_from_default(dict,s,target_loop)
     if any(x->!ismissing(x),m)
         println("Result of lookup for $s: $m")
         return m
     end
+    # end of the road for non dREL dictionaries
+    if !has_default_methods(dict) return fill(missing,length(target_loop)) end
     # is there a derived default available?
-    if !haskey(dict.def_meths,(s,"enumeration.default"))
+    if !has_def_meth(dict,(s,"enumeration.default"))
         add_definition_func!(dict,s)
     end
     func_code = get_def_meth(dict,s,"enumeration.default")
     try
-        result = [Base.invokelatest(func_code,db,p) for p in target_loop]
+        return [Base.invokelatest(func_code,db,p) for p in target_loop]
     catch e
         println("$(typeof(e)) when executing default dREL for $s/enumeration.default, should not happen")
         println("Function text: $(get_def_meth_txt(dict,s,"enumeration.default"))")
         rethrow(e)
     end
-    return result
+    throw(error("should never reach this point"))
 end
 
 """
-Derive missing values from a complete collection
+derive(b::DynamicRelationalContainer,dataname::String,nspace)
+
+Derive values for `dataname` in `nspace` missing from `b`. Return `missing`
+if the category itself is missing, otherwise return an Array potentially
+containing missing values with one value for each row in the category.
 """
 derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
     dict = get_dictionary(b,nspace)
+    target_loop = get_category(b,find_category(dict,dataname),nspace)
+    if ismissing(target_loop) || length(target_loop) == 0 return missing end
+    # may have been derived in the process of getting the category 
+    if haskey(target_loop,dataname) return target_loop[dataname] end
+    # try derivation
+    if !has_drel_methods(dict) return fill(missing,length(target_loop)) end
     if !(has_func(dict,dataname))
-        add_new_func(dict,dataname)
+        add_new_func(b,dataname,nspace)
     end
     func_code = get_func(dict,dataname)
-    target_loop = get_category(b,find_category(dict,dataname),nspace)
     try
         [Base.invokelatest(func_code,b,p) for p in target_loop]
     catch e
@@ -395,8 +412,10 @@ found missing from a packet.
 derive(p::CatPacket,obj::String,db) = begin
     d = get_category(p)
     dict = get_dictionary(d)
+    if !has_drel_methods(dict) return missing end 
     cat = get_name(d)
     dataname = find_name(dict,cat,obj)
+    # get the underlying data
     if !(has_func(dict,dataname))
         add_new_func(dict,dataname)
     end
@@ -424,10 +443,10 @@ Category methods create whole new categories
 
 derive_category(b::DynamicRelationalContainer,cat::String,nspace) = begin
     dict = get_dictionary(b,nspace)
-    t = get_func_text(dict,cat,"Evaluation")
+    t = load_func_text(dict,cat,"Evaluation")
     if t == "" return end
     if !(has_func(dict,cat))
-        add_new_func(dict,cat)
+        add_new_func(b,cat,nspace)
     else
         println("Func for $cat already exists")
     end
@@ -452,9 +471,11 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
     # Try using enumeration default instead
     def_val = lookup_default(dict,dataname,cp)
     if !ismissing(def_val)
-        return def_val
+        return convert_to_julia(dict,dataname,def_val)
     end
-    if !haskey(dict.def_meths,(dataname,"_enumeration.default"))
+    # Bail if not dREL aware
+    if !has_default_methods(dict) return missing end
+    if !has_def_meth(dict,(dataname,"_enumeration.default"))
         add_definition_func!(dict,dataname)
     end
     func_code = get_def_meth(dict,dataname,"enumeration.default")
@@ -466,15 +487,24 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
 end
 
 get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
-    nspace = get_namespaces(block)[]
+    nspace = get_dic_namespace(get_dictionary(cp))
     get_default(block,cp,obj,nspace)
 end
 
+add_new_func(b::DynamicRelationalContainer,s::String,nspace) = begin
+    dict = get_dictionary(b,nspace)
+    # get all categories mentioned
+    all_cats = String[]
+    for n in get_namespaces(b)
+        append!(all_cats,get_categories(get_dictionary(b,n)))
+    end
+    add_new_func(dict,s,all_cats)
+end
 
-add_new_func(d::abstract_cif_dictionary,s::String) = begin
-    t = get_func_text(d,s,"Evaluation")
+add_new_func(d::abstract_cif_dictionary,s::String,special_names) = begin
+    t = load_func_text(d,s,"Evaluation")
     if t != ""
-        r = make_julia_code(t,s,d)
+        r = make_julia_code(t,s,d,reserved=special_names)
     else
         r = Meta.parse("(a,b) -> missing")
     end
@@ -482,6 +512,8 @@ add_new_func(d::abstract_cif_dictionary,s::String) = begin
     println(r)
     set_func!(d,s, r, eval(r))
 end
+
+add_new_func(d::abstract_cif_dictionary,s::String) = add_new_func(d,s,String[])
 
 #== Definition methods.
 
@@ -518,7 +550,7 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
         end
     end
     # now add any redefinitions
-    t = get_func_text(d,s,"Definition")
+    t = load_func_text(d,s,"Definition")
     if t != ""
         r = make_julia_code(t,s,d)
         att_name = "not found"
@@ -537,32 +569,7 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
     end
 end
 
-#==   Lookup 
-
-A default value may be tabulated, and some other value in the
-current packet is used to index into the table
-
-==#
-
-lookup_default(dict::abstract_cif_dictionary,dataname::String,cp::CatPacket) = begin
-    definition = dict[dataname][:enumeration]
-    index_name = :def_index_id in propertynames(definition) ? definition[!,:def_index_id][] : missing
-    if ismissing(index_name) return missing end
-    object_name = find_object(dict,index_name)
-    # Note non-deriving form of getproperty
-    println("Looking for $object_name in $(get_name(getfield(cp,:source_cat)))")
-    current_val = getproperty(cp,Symbol(object_name))
-    print("Indexing $dataname using $current_val to get")
-    # Now index into the information
-    indexlist = dict[dataname][:enumeration_default][!,:index]
-    pos = indexin([current_val],indexlist)
-    if pos[1] == nothing return missing end
-    as_string = dict[dataname][:enumeration_default][!,:value][pos[1]]
-    println(" $as_string")
-    return convert_to_julia(dict,dataname,[as_string])[1]
-end
-
-lookup_default(dict::abstract_cif_dictionary,dataname::String,cat::CifCategory) = begin
+all_from_default(dict,dataname,cat::CifCategory) = begin
     [lookup_default(dict,dataname,cp) for cp in cat]
 end
 

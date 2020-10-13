@@ -33,13 +33,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             lh = ast_node.args[1]
             if typeof(ast_node.args[2]) == Symbol && ast_node.args[2] != :missing #direct assignment, lets keep it
                 rhs_symb = ast_node.args[2]
-                if typeof(rhs_symb) == Expr && rhs_symb.head == :call
-                    if rhs_symb.args[1] == :first_packet   #a Set category
-                        in_scope_dict[lh] = rhs_symb.args[2].args[3]
-                        #first_packet(CategoryObject(__datablock,<set category>))
-                        #println("Assignment of $rhs_symb to $lh")
-                    end
-                elseif rhs_symb == :__packet
+                if rhs_symb == :__packet
                     in_scope_dict[lh] = in_scope_dict[:__packet]
                     #println("__packet -> $lh")
                 else
@@ -103,6 +97,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             if ast_node.args[2] in keys(in_scope_dict)
                 # if assignment to '__packet', look further
                 target_cat = in_scope_dict[ast_node.args[2]]
+                println("For $(ast_node.args[2]), target is $target_cat")
                 if in_scope_dict[ast_node.args[2]] == "__packet"
                     target_cat = in_scope_dict[Symbol("__packet")]
                 end
@@ -130,7 +125,12 @@ end
 ==#
 
 ast_construct_type(ast_node,cifdic,cat,obj) = begin
-    final_type,final_cont = get_julia_type_name(cifdic,cat,obj)
+    # if the category is not from this dictionary, bail
+    full = split(cat,"ѫ")
+    if length(full) > 1 && full[1] != get_dic_namespace(cifdic)
+        return ast_node
+    end
+    final_type,final_cont = get_julia_type_name(cifdic,full[end],obj)
     if final_cont == "Single"
         #println("category $cat object $obj type $final_type")
         return :($ast_node::$final_type)
@@ -221,13 +221,20 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
             # The logic here: if the subject of the subscription is a known category object,
-            # then do not + 1. Otherwise, it must be a plain old array dereference, and
+            # then do not + 1. If a pair operator is present, then we have a dotlist, and
+            # do not add + 1. Otherwise, it must be a plain old array dereference, and
             # one should be added. If the subject of the subscription is itself an
             # expression, then we must have a category dereference and can ignore it.
             if typeof(ast_node.args[1])!= Expr && !(String(ast_node.args[1]) in in_scope_list)
                 #println("Checking node $(ixpr.args[2])")
-                if typeof(ixpr.args[2]) ==  Expr && ixpr.args[2].head == :call && ixpr.args[2].args[1] == :(:)
-                    ixpr.args[2].args[2] = :($(ixpr.args[2].args[2])+1)
+                if typeof(ixpr.args[2]) ==  Expr && ixpr.args[2].head == :call
+                    if ixpr.args[2].args[1] == :(:)
+                        ixpr.args[2].args[2] = :($(ixpr.args[2].args[2])+1)
+                    elseif ixpr.args[2].args[1] != :(=>)
+                        for i in 2:length(ixpr.args)
+                            ixpr.args[i] = :($(ixpr.args[i])+1)
+                        end
+                    end
                     # no need to adjust endpoint as Julia is inclusive, dREL is exclusive
                 else  # multi-indexing, has anything been missed?
                     for i in 2:length(ixpr.args)

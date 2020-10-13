@@ -1,22 +1,26 @@
 #==
 
-Introduction
-============
+Introduction ============
 
-The Lerche grammar system allows 'Transformer' functions to be defined. Each transformer
-is named after a node in the parse tree, and takes the contents of the node as an
-argument.  The transformers in this file transform the parse tree into a piece of
-Julia code assuming the following environment:
+The Lerche grammar system allows 'Transformer' functions to be
+defined. Each transformer is named after a node in the parse tree, and
+takes the contents of the node as an argument.  The transformers in
+this file transform the parse tree into a piece of Julia code assuming
+the following environment:
 
-1. The entire dREL method becomes a Julia function definition that takes a Category
-   representing the category in which the definition appears.
-   This allows the function to be 'mapped' over the category if necessary.
+1. The entire dREL method becomes a Julia function definition that
+   takes a Category representing the category in which the definition
+   appears.  This allows the function to be 'mapped' over the category
+   if necessary.
 
-2. The outer function also takes a cif data block object with a specified interface.
+2. The outer function also takes a cif data block object with a
+specified interface.
 
-3. The CIF interactions are mediated by the CrystalInfoFramework package.
+3. The CIF interactions are mediated by the CrystalInfoFramework
+package.
    
-The transformer methods will assume that any interior nodes have already been processed.
+The transformer methods will assume that any interior nodes have
+already been processed.
 
 ==#
 
@@ -39,8 +43,8 @@ The transformer methods will assume that any interior nodes have already been pr
     namespace::String
 end
 
-TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict()) = begin
-    cat_list = get_categories(data_dict)
+TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[]) = begin
+    cat_list = unique!(append!(extra_cats,get_categories(data_dict)))
     is_category = false
     if lowercase(dataname) in cat_list   # a normal method
         target_cat = lowercase(dataname)
@@ -48,7 +52,7 @@ TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict()) = begin
         is_category = true
     else
         target_cat = find_category(data_dict,dataname)
-        target_object = data_dict[dataname][:name][!,:object_id][]
+        target_object = find_object(data_dict,dataname)
     end
     func_cat,func_list = get_dict_funcs(data_dict)
     is_func = target_cat == func_cat
@@ -89,7 +93,7 @@ a fully-transformed parse tree
     end
     for c in t.obj_ids   #category methods only
         push!(header.args,
-              :($(Symbol("__"+String(c))) = []))
+              :($(Symbol("__"+String(c))) = Union{Missing,T where T}[]))
     end
     push!(header.args,arg)
     if !t.is_category
@@ -152,9 +156,9 @@ have matched with reals if they reach this rule.
         output = :($(v[2:end-1]))
     elseif s.type_ in ("HEXINT","OCTINT","BININT","INTEGER")
         output = :($(Base.parse(Int64,v)))
-    elseif s.type_ == NULL
+    elseif s.type_ == "NULL"
         output = :(nothing)
-    elseif s.type_ == MISSING
+    elseif s.type_ == "MISSING"
         output = :(missing)
     end
     return output
@@ -340,11 +344,19 @@ end
     end
 end
 
-@inline_rule subscription(t::TreeToJulia,a,b) = begin
-    if b isa Array    #slice list
-        return Expr(:ref,a,b...)
+@inline_rule subscription(t::TreeToJulia,a,b) =  begin
+    if typeof(b) == Array
+        #println("Sub: Processing array $b")
+        Expr(:ref,a,b)
+    elseif typeof(b) <: Dict  #dotlist
+        #println("Sub: Processing dotlist $b")
+        fullexpr = :($a[])
+        for (obj,val) in b
+            push!(fullexpr.args,:($(QuoteNode(obj))=>$val))
+        end
+        return fullexpr
     else
-        return Expr(:ref,a,b)
+        Expr(:ref,a,b...)
     end
 end
 
@@ -587,10 +599,22 @@ end
 
 @inline_rule repeat_stmt(t::TreeToJulia,_,suite) = Expr(:while,true,suite)
 
+#
+# The 'outer' keyword appears not to work at the moment, so
+# we simulate the effect of capturing the value by defining a
+# local variable that is assigned to the desired variable
+# at each iteration
+#
 @rule do_stmt(t::TreeToJulia,args) = begin
-    increment = if length(args) > 5 args[6] else 1 end
-    return Expr(:for,
-                Expr(:(=),args[2],Expr(:call,:(:),args[3],increment,args[4])),args[end])
+    println("Args for do stmt: $args")
+    #println("$(dump(args[2]))")
+    increment = length(args) > 5 ? args[5] : 1
+    dummy_var = Symbol("__"*String(args[2]))
+    result = :(
+        for $dummy_var = $(args[3]):$increment:$(args[4]); $(args[2]) =
+        $dummy_var; $(args[end]) end
+    )
+    return result
 end
 
 @inline_rule with_stmt(t::TreeToJulia,_,id1,_,id2,suite) = begin
@@ -599,6 +623,7 @@ end
         return :($id1 = $id2::Union{CifCategory,CatPacket};$suite)
     else
         t.target_category_alias = id1
+        println("Target category alias set to $(t.target_category_alias)")
         return :($id1 = $id2;$suite)
     end
 end

@@ -134,8 +134,11 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
             result = getindex(datablock,dataname,namespace)[rowno]
         end
     end
-    if !ismissing(result)
-        println("Found! $result")
+    if !ismissing(result) && !isnothing(result)
+        #println("Found! $result")
+        return result
+    elseif isnothing(result)
+        #println("Found! nothing")
         return result
     end
     m = derive(cp,obj,datablock)
@@ -149,6 +152,7 @@ end
 
 # Generic fallback
 drel_property_access(a,b,c) = begin
+    println("Not drel compatible: looking for $b in $(typeof(a)) using data from $(typeof(c))")
     return getproperty(a,b)
 end
 
