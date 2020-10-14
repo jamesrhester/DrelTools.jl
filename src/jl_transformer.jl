@@ -346,17 +346,18 @@ end
 
 @inline_rule subscription(t::TreeToJulia,a,b) =  begin
     if typeof(b) == Array
-        #println("Sub: Processing array $b")
+        println("Sub: Processing array $b")
         Expr(:ref,a,b)
     elseif typeof(b) <: Dict  #dotlist
-        #println("Sub: Processing dotlist $b")
+        println("Sub: Processing dotlist $b")
         fullexpr = :($a[])
         for (obj,val) in b
             push!(fullexpr.args,:($(QuoteNode(obj))=>$val))
         end
         return fullexpr
     else
-        Expr(:ref,a,b...)
+        println("Sub: processing $(typeof(b))")
+        Expr(:ref,a,b)
     end
 end
 
@@ -380,7 +381,7 @@ end
     println("Attribute ref: $a . $b")
     println("Watching for $(t.target_category_alias) . $(t.target_object)")
     if (a == :__packet || a == t.target_category_alias) &&
-        b == t.target_object
+        lowercase(b) == t.target_object
         return :__dreltarget
     else
         return :(drel_property_access($a,$(lowercase(b)),__datablock))

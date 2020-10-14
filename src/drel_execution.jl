@@ -356,7 +356,7 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
     # end of the road for non dREL dictionaries
     if !has_default_methods(dict) return fill(missing,length(target_loop)) end
     # is there a derived default available?
-    if !has_def_meth(dict,(s,"enumeration.default"))
+    if !has_def_meth(dict,s,"enumeration.default")
         add_definition_func!(dict,s)
     end
     func_code = get_def_meth(dict,s,"enumeration.default")
@@ -475,7 +475,7 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
     end
     # Bail if not dREL aware
     if !has_default_methods(dict) return missing end
-    if !has_def_meth(dict,(dataname,"_enumeration.default"))
+    if !has_def_meth(dict,dataname,"_enumeration.default")
         add_definition_func!(dict,dataname)
     end
     func_code = get_def_meth(dict,dataname,"enumeration.default")
