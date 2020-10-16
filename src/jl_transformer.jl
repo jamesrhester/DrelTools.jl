@@ -345,9 +345,9 @@ end
 end
 
 @inline_rule subscription(t::TreeToJulia,a,b) =  begin
-    if typeof(b) == Array
+    if typeof(b) <: Array
         println("Sub: Processing array $b")
-        Expr(:ref,a,b)
+        Expr(:ref,a,b...)
     elseif typeof(b) <: Dict  #dotlist
         println("Sub: Processing dotlist $b")
         fullexpr = :($a[])
@@ -355,7 +355,7 @@ end
             push!(fullexpr.args,:($(QuoteNode(obj))=>$val))
         end
         return fullexpr
-    else
+    else typeof(b) <: Expr
         println("Sub: processing $(typeof(b))")
         Expr(:ref,a,b)
     end

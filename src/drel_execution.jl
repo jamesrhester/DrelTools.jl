@@ -380,17 +380,31 @@ containing missing values with one value for each row in the category.
 derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
     dict = get_dictionary(b,nspace)
     target_loop = get_category(b,find_category(dict,dataname),nspace)
-    if ismissing(target_loop) || length(target_loop) == 0 return missing end
-    # may have been derived in the process of getting the category 
-    if haskey(target_loop,dataname) return target_loop[dataname] end
-    # try derivation
-    if !has_drel_methods(dict) return fill(missing,length(target_loop)) end
+    if ismissing(target_loop) return missing end
+    return derive(b,target_loop,dataname,dict,nspace)
+end
+
+derive(b::DynamicDDLmRC,dataname::String) = begin
+    nspaces = get_namespaces(b)
+    derive(b,dataname,nspaces[])
+end
+
+derive(b::DynamicRelationalContainer,s::SetCategory,dataname::String,dict,nspace) = begin
+    obj = find_object(dict,dataname)
+    if haskey(s,dataname) return s[Symbol(obj)] end
+    if !has_drel_methods(dict) return missing end
     if !(has_func(dict,dataname))
         add_new_func(b,dataname,nspace)
     end
     func_code = get_func(dict,dataname)
+    pkt = first_packet(s)
+    #if length(keys(s)) == 0   # no data
+    #    pkt = nothing
+    #else
+    #    pkt = first(s)
+    #end
     try
-        [Base.invokelatest(func_code,b,p) for p in target_loop]
+        [Base.invokelatest(func_code,b,pkt)]
     catch e
         println("Warning: error $(typeof(e)) in dREL method for $dataname, should never happen.")
         println("Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))")
@@ -398,9 +412,22 @@ derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
     end
 end
 
-derive(b::DynamicDDLmRC,dataname::String) = begin
-    nspaces = get_namespaces(b)
-    derive(b,dataname,nspaces[])
+derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::String,dict,nspace) = begin
+    if length(s) == 0 return missing end
+    obj = find_object(dict,dataname)
+    if haskey(s,dataname) return s[Symbol(obj)] end
+    if !has_drel_methods(dict) return fill(missing,length(s)) end
+    if !(has_func(dict,dataname))
+        add_new_func(b,dataname,nspace)
+    end
+    func_code = get_func(dict,dataname)
+    try
+        [Base.invokelatest(func_code,b,p) for p in s]
+    catch e
+        println("Warning: error $(typeof(e)) in dREL method for $dataname, should never happen.")
+        println("Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))")
+        rethrow(e)
+    end
 end
 
 #== Per packet derivation
@@ -471,7 +498,7 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
     # Try using enumeration default instead
     def_val = lookup_default(dict,dataname,cp)
     if !ismissing(def_val)
-        return convert_to_julia(dict,dataname,def_val)
+        return convert_to_julia(dict,dataname,[def_val])[]
     end
     # Bail if not dREL aware
     if !has_default_methods(dict) return missing end
@@ -570,7 +597,7 @@ add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
 end
 
 all_from_default(dict,dataname,cat::CifCategory) = begin
-    [lookup_default(dict,dataname,cp) for cp in cat]
+    convert_to_julia(dict,dataname,[lookup_default(dict,dataname,cp) for cp in cat])
 end
 
 #== 

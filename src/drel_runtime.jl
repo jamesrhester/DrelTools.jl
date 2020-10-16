@@ -143,7 +143,7 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     end
     m = derive(cp,obj,datablock)
     if ismissing(m)
-        m = get_default(datablock,cp,Symbol(obj))
+        m = get_default(datablock,cp,Symbol(obj),namespace)
     end
     # store the cached value
     cache_value!(datablock,namespace,dataname,rowno, m)
