@@ -121,6 +121,28 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
     end
 end
 
+ast_assign_retval(ast_node,cifdic,cat,obj) = begin
+    ixpr = :(:call,:f)  #dummy
+    if typeof(ast_node) == Expr
+        if ast_node.head == :return
+            final_type,final_cont = get_julia_type_name(cifdic,cat,obj)
+            if final_type == :CaselessString && final_cont == "Single"
+                ast_node = :(return $final_type($(ast_node.args[1])))
+                println("Return statement now $ast_node")
+                return ast_node
+            else
+                return ast_node
+            end
+        else
+            ixpr.head = ast_node.head
+            ixpr.args = [ast_assign_retval(x,cifdic,cat,obj) for x in ast_node.args]
+            return ixpr
+        end
+    else
+        return ast_node
+    end
+end
+
 #== A helper function to construct a type specification at the end of the supplied node
 ==#
 
@@ -356,7 +378,8 @@ fix_scope(node) = begin
     ast_node = node
     if ast_node.head == :block ast_node = ast_node.args[2] end
     if !((ast_node.head == :-> && ast_node.args[1].head == :tuple)||
-         (ast_node.head == :(=) && ast_node.args[1].head == :call))
+         (ast_node.head == :(=) && ast_node.args[1].head == :call) ||
+         (ast_node.head == :function))
         return ast_node
     end
     enclosing = :()

@@ -6,7 +6,7 @@
 
 using LinearAlgebra
 
-export drelvector,to_julia_array,drel_strip
+export drelvector,to_julia_array,drel_strip,drel_split
 
 # a character can be compared to a single-character string
 Base.:(==)(c::Char,y::String) = begin
@@ -166,4 +166,16 @@ from zero
 """
 drel_strip(a::Array,n::Int) = begin
     return (b[n+1] for b in a)
+end
+
+"""
+
+drel_split implements the drel "Split" function.
+
+drel_split(string,character) returns an array of
+values obtained by splitting the string at each
+occurrence of character.
+"""
+drel_split(s::String,c) = begin
+    return split(s,c)
 end

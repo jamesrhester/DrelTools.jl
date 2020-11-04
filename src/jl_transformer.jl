@@ -43,8 +43,12 @@ already been processed.
     namespace::String
 end
 
-TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[]) = begin
+TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[])= begin
     cat_list = unique!(append!(extra_cats,get_categories(data_dict)))
+    if dataname == "_type.contents"
+        println("Cats supplied $extra_cats: stacktrace\n")
+        for line in stacktrace() println("$line") end
+    end
     is_category = false
     if lowercase(dataname) in cat_list   # a normal method
         target_cat = lowercase(dataname)
@@ -57,6 +61,8 @@ TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=St
     func_cat,func_list = get_dict_funcs(data_dict)
     is_func = target_cat == func_cat
     nspace = get_dic_namespace(data_dict)
+    println("Creating transformer with $target_cat . $target_object
+with cat_list $cat_list in namespace $nspace")
     TreeToJulia(target_cat,target_object,is_func,is_validation,
                 is_category,
                 cat_list,att_dict,func_list,Set(),[],Symbol(target_cat),
@@ -99,7 +105,10 @@ a fully-transformed parse tree
     if !t.is_category
         push!(header.args,:(return __dreltarget))
         final_expr = quote
-            (__datablock::DynamicRelationalContainer,__packet::CatPacket) -> $header
+           function
+               (__datablock::DynamicRelationalContainer,__packet::CatPacket)
+               $header
+           end
         end
     else
         returnexpr = Expr(:tuple)
@@ -679,7 +688,8 @@ transform_function_name(in_name,func_args) = begin
                 "current_row"=> :current_row,
                 "float"=> :Float64,
                 "strip"=> :drel_strip,
-                "eigen"=> :drel_eigen,
+        "eigen"=> :drel_eigen,
+        "split"=> :drel_split,
       "sind"=> :sind,
       "cosd"=> :cosd,
       "tand"=> :tand,
@@ -687,7 +697,8 @@ transform_function_name(in_name,func_args) = begin
       "acosd"=> :acosd,
       "atand"=> :atand,
                 "repr"=> :string,
-      "transpose"=> :permutedims
+        "transpose"=> :permutedims,
+        "is_missing"=> :ismissing
     )
     test_name = lowercase(in_name)
     target_name = get(builtins,test_name,nothing)

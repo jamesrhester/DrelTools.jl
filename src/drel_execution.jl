@@ -71,6 +71,10 @@ make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary
     #parsed = cat_to_packet(parsed,set_categories)  #turn Set categories into packets
     #println("####\n    Assigning types\n####\n")
     parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats = reserved)
+    if !transformer.is_category
+        parsed = ast_assign_retval(parsed,dict,transformer.target_cat,find_object(dict,dataname))
+    end
+    return parsed
 end
 
 define_dict_funcs(c::abstract_cif_dictionary) = begin
@@ -322,7 +326,7 @@ repair_cat(d::DynamicDDLmRC,l::LegacyCategory,nspace) = begin
     if length(keyname) != 1 return l end
     keyname = keyname[]
     if !(has_func(dict,keyname))
-        add_new_func(dict,keyname)
+        add_new_func(d,keyname,nspace)
     end
     func_code = get_func(dict,keyname)
     println("Preparing to invoke code for $keyname")
@@ -430,6 +434,16 @@ derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::String,dict,nspac
     end
 end
 
+#
+# Deal with empty legacy categories which might pop up
+#
+derive(b::DynamicRelationalContainer,s::LegacyCategory,dataname,dict,nspace) = begin
+    if length(s) == 0 return []
+    else
+        throw(error("Category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
+    end
+end
+
 #== Per packet derivation
 
 This is called from within a dREL method when an item is
@@ -439,12 +453,13 @@ found missing from a packet.
 derive(p::CatPacket,obj::String,db) = begin
     d = get_category(p)
     dict = get_dictionary(d)
+    nspace = get_dic_namespace(dict)
     if !has_drel_methods(dict) return missing end 
     cat = get_name(d)
     dataname = find_name(dict,cat,obj)
     # get the underlying data
     if !(has_func(dict,dataname))
-        add_new_func(dict,dataname)
+        add_new_func(db,dataname,nspace)
     end
     func_code = get_func(dict,dataname)
     try
@@ -523,6 +538,7 @@ add_new_func(b::DynamicRelationalContainer,s::String,nspace) = begin
     # get all categories mentioned
     all_cats = String[]
     for n in get_namespaces(b)
+        println("Namespace $n")
         append!(all_cats,get_categories(get_dictionary(b,n)))
     end
     add_new_func(dict,s,all_cats)
@@ -540,7 +556,10 @@ add_new_func(d::abstract_cif_dictionary,s::String,special_names) = begin
     set_func!(d,s, r, eval(r))
 end
 
-add_new_func(d::abstract_cif_dictionary,s::String) = add_new_func(d,s,String[])
+add_new_func(d::abstract_cif_dictionary,s::String) = begin
+    println("Warning: recognising only categories from $(get_dic_name(d))")
+    add_new_func(d,s,String[])
+end
 
 #== Definition methods.
 

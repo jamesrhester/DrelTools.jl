@@ -11,6 +11,7 @@ end
 
 const db = setup()
 
+
 @testset "Test dictionary-defined functions" begin
     # Test that our functions are available
     d = get_dictionary(db)
