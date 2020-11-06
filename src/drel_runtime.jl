@@ -6,7 +6,7 @@
 
 using LinearAlgebra
 
-export drelvector,to_julia_array,drel_strip,drel_split
+export drelvector,to_julia_array,drel_strip,drel_split,DrelTable
 
 # a character can be compared to a single-character string
 Base.:(==)(c::Char,y::String) = begin
@@ -37,6 +37,50 @@ Base.:(*)(a::Array,b::drelvector) = begin
     #println("To get $res")
     return res
 end
+
+#    **DrelTable**
+#
+# In order to capture any deviations from normal Julia
+# we define our own Dict equivalent.  The most obvious
+# deviation is being able to match CaselessStrings when
+# used as keys.
+#
+struct DrelTable <: AbstractDict{Union{String,CaselessString,Integer},Any}
+    keys::Array{Union{String,CaselessString,Integer},1}
+    values::Array{Any,1}
+end
+
+DrelTable() = DrelTable([],[])
+
+Base.keys(d::DrelTable) = d.keys
+Base.values(d::DrelTable) = d.values
+Base.getindex(d::DrelTable,k) = begin
+    index = findfirst(x->isequal(x,k),d.keys)
+    if isnothing(index) throw(KeyError(k)) end
+    return d.values[index]
+end
+
+Base.setindex!(d::DrelTable,v,k) = begin
+    index = findfirst(x->isequal(x,k),d.keys)
+    if isnothing(index)
+        push!(d.keys,k)
+        push!(d.values,v)
+    else
+        d.values[index] = v
+    end
+end
+
+Base.iterate(d::DrelTable) = begin
+    if length(d) == 0 return nothing end
+    return Pair(d.keys[1],d.values[1]),2
+end
+
+Base.iterate(d::DrelTable,state) = begin
+    if length(d) < state return nothing end
+    return Pair(d.keys[state],d.values[state]),state+1
+end
+
+Base.length(d::DrelTable) = length(d.keys)
 
 # premultiply: transpose first
 Base.:(*)(a::drelvector,b::Array{N,2} where N) = drelvector(permutedims(a.elements) * b)

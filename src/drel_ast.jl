@@ -189,7 +189,8 @@ The form `__datablock[String]` refers to a category from the datablock and shoul
 be ignored.
 ==#
 
-ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = begin
+ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;
+                 lhs=nothing) = begin
     #println("$ast_node: in scope $in_scope_list")
     ixpr = :(:call,:f)  #dummy
     if typeof(ast_node) == Expr
@@ -199,7 +200,8 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             lh = ast_node.args[1]
             # this is for the filtering
             ixpr.head = ast_node.head
-            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=lh) for x in ast_node.args]
+            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
+                                          lhs=lh) for x in ast_node.args]
             if ixpr.args[2] == Symbol("__packet")
                 push!(in_scope_list,String(lh))
             end
@@ -210,7 +212,7 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             end
             return ast_node
         # Find category construction (old style)
-        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] in (:CifCategory,:(Dict{String,Any}))
+        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] in (:CifCategory,:DrelTable)
             push!(in_scope_list,String(lhs))
             return ast_node
         # Find category access (new style)
@@ -222,14 +224,16 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             new_scope_list = deepcopy(in_scope_list)
             println("New scope!")
             ixpr.head = ast_node.head
-            ixpr.args = [ast_fix_indexing(x,new_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
+            ixpr.args = [ast_fix_indexing(x,new_scope_list,cifdic,
+                                          lhs=nothing) for x in ast_node.args]
             println("At end of scope: $new_scope_list")
             return ixpr
         # Fix the actual indexing
         elseif ast_node.head == :call && ast_node.args[1] == :getindex
             println("Found call of getindex")
             ixpr.head = ast_node.head
-            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
+            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
+                                          lhs=nothing) for x in ast_node.args]
             if !(String(ast_node.args[2]) in in_scope_list)
                 ixpr.args[3] = :($(ixpr.args[3])+1)
             else  #a bona-fide dREL packet selection!
@@ -241,7 +245,8 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
         elseif ast_node.head == :ref
             println("Found subscription: $(ast_node.args)")
             ixpr.head = ast_node.head
-            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
+            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
+                                          lhs=nothing) for x in ast_node.args]
             # The logic here: if the subject of the subscription is a known category object,
             # then do not + 1. If a pair operator is present, then we have a dotlist, and
             # do not add + 1. Otherwise, it must be a plain old array dereference, and
@@ -272,7 +277,8 @@ ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;lhs=nothing) = b
             return ixpr
         else          
             ixpr.head = ast_node.head
-            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,lhs=nothing) for x in ast_node.args]
+            ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
+                                          lhs=nothing) for x in ast_node.args]
             return ixpr
         end
     else #not an expression node
@@ -377,8 +383,9 @@ fix_scope(node) = begin
     # go down until a function definition is found
     ast_node = node
     if ast_node.head == :block ast_node = ast_node.args[2] end
-    if !((ast_node.head == :-> && ast_node.args[1].head == :tuple)||
-         (ast_node.head == :(=) && ast_node.args[1].head == :call) ||
+    if !(ast_node isa Expr) return node end
+    if !((ast_node.head == :->  && ast_node.args[1] isa Expr && ast_node.args[1].head == :tuple)||
+         (ast_node.head == :(=) && ast_node.args[1] isa Expr && ast_node.args[1].head == :call) ||
          (ast_node.head == :function))
         return ast_node
     end

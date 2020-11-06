@@ -114,9 +114,10 @@ struct DynamicDDLmRC <: DynamicRelationalContainer
     data
     dict::Dict{String,abstract_cif_dictionary} #provides dREL functions
     value_cache::Dict{String,Dict{String,Any}} #namespace indexed
+    cat_cache::Dict{String,Dict{String,CifCategory}}
 end
 
-DynamicDDLmRC(ds::DataSource,dict::abstract_cif_dictionary) = begin
+DynamicDDLmRC(ds::DataSource, dict::abstract_cif_dictionary) = begin
     DynamicDDLmRC(IsDataSource(),ds,dict)
 end
 
@@ -126,7 +127,9 @@ end
 
 DynamicDDLmRC(::IsDataSource,ds,dict) = begin
     nspace = get_dic_namespace(dict)
-    DynamicDDLmRC(ds,Dict(nspace=>dict),Dict(nspace=>Dict{String,Any}()))
+    DynamicDDLmRC(ds,Dict(nspace=>dict),
+                  Dict(nspace=>Dict{String,Any}()),
+                  Dict(nspace=>Dict{String,CifCategory}()))
 end
 
 DynamicDDLmRC(r::AbstractRelationalContainer) = begin
@@ -135,7 +138,8 @@ DynamicDDLmRC(r::AbstractRelationalContainer) = begin
     for n in nspaces
         d[n] = Dict()
     end
-    DynamicDDLmRC(r,get_dicts(r),d)
+    DynamicDDLmRC(r,get_dicts(r),d,
+                  Dict{String,Dict{String,CifCategory}}())
 end
 
 get_namespaces(d::DynamicDDLmRC) = collect(keys(d.value_cache))
@@ -160,6 +164,17 @@ empty_cache!(d::DynamicDDLmRC) = begin
     for k in keys(d.value_cache)
         empty!(d.value_cache[k])
     end
+    for k in keys(d.cat_cache)
+        empty!(d.cat_cache[k])
+    end
+end
+
+invalidate_cache!(d::DynamicDDLmRC,nspace,name) = begin
+    # invalidate related categories
+    cat = find_category(d.dict[nspace],name)
+    if haskey(d.cat_cache[nspace],cat)
+        delete!(d.cat_cache[nspace],cat)
+    end
 end
 
 cache_value!(d::DynamicDDLmRC,name::String,value) = begin
@@ -174,9 +189,13 @@ cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
         println("New length: $(length(value))")
     end
     d.value_cache[nspace][lowercase(name)] = value
+    invalidate_cache!(d,nspace,name)
 end
 
+#
 # Don't bother caching missing values
+# Assume that any cached categories will still be valid
+#
 cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = begin
     if !ismissing(value)
         d.value_cache[nspace][lowercase(name)][index] = value
@@ -191,6 +210,7 @@ cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
     for k in get_datanames(catvalue)
         cache_value!(d,nspace,k,catvalue[k])
     end
+    d.cat_cache[nspace][catname] = catvalue
 end
 
 get_dictionary(d::DynamicDDLmRC) = d.dict[get_namespaces(d)[]]
@@ -210,7 +230,8 @@ select_namespace(d::DynamicDDLmRC,nspace) = begin
         if !(e isa KeyError) rethrow() end
     end
     DynamicDDLmRC(filtered_data,Dict(nspace=>d.dict[nspace]),
-                  Dict(nspace=>d.value_cache[nspace]))
+                  Dict(nspace=>d.value_cache[nspace]),
+                  Dict(nspace=>d.cat_cache[nspace]))
 end
 
 """
@@ -291,20 +312,28 @@ end
 Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
 
 get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
+    if haskey(d.cat_cache[nspace],s) return d.cat_cache[nspace][s] end
     dict = get_dictionary(d,nspace)
     if is_set_category(dict,s)   #an empty category is good enough
-        return construct_category(d,s,nspace)
-    end
-    println("Searching for category $s")
-    if has_category(d,s,nspace)
+        d.cat_cache[nspace][s] = construct_category(d,s,nspace)
+    elseif has_category(d,s,nspace)
         c = construct_category(d,s,nspace)
-        if typeof(c) != LegacyCategory return c end
-        return repair_cat(d,c,nspace)
+        if typeof(c) != LegacyCategory
+            d.cat_cache[nspace][s] = c
+        else
+            d.cat_cache[nspace][s] = repair_cat(d,c,nspace)
+        end
+    else
+        derive_category(d,s,nspace)   #worth a try
+        if has_category(d,s,nspace)
+            d.cat_cache[nspace][s] = construct_category(d,s,nspace)
+        end
     end
-    derive_category(d,s,nspace)   #worth a try
-    if has_category(d,s,nspace) return construct_category(d,s,nspace) end
-    println("Category $s not found for namespace $nspace")
-    return missing
+    if !haskey(d.cat_cache[nspace],s)
+        println("Category $s not found for namespace $nspace")
+        return missing
+    end
+    return d.cat_cache[nspace][s]  
 end
 
 """
