@@ -17,9 +17,9 @@ version = "3.23.0"
 
 [[CrystalInfoFramework]]
 deps = ["DataFrames", "Printf", "URIParser"]
-git-tree-sha1 = "d9aea003553d11e3377f269fbcdedb56b9331659"
+git-tree-sha1 = "7e4079ae0e247ffdc9aeffa31c59efc7bebf9b10"
 repo-rev = "master"
-repo-url = "/home/jrh/programs/CIF/CrystalInfoFramework.jl"
+repo-url = "https://github.com/jamesrhester/CrystalInfoFramework.jl.git"
 uuid = "6007d9b0-c6b2-11e8-0510-1d10e825f3f1"
 version = "0.1.0"
 
