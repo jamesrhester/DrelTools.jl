@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: jamesrhester/CrystalInfoFramework.jl/.github/actions/cifapi_action
+      - uses: jamesrhester/CrystalInfoFramework.jl/.github/actions/cifapi_action@master
       - name: check the file location
         run: |
                 ls $GITHUB_WORKSPACE/lib
