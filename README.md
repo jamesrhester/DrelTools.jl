@@ -36,7 +36,7 @@ defines functions used in other dREL fragments.
 Note that dREL functions are like library functions
 that are not associated with data names, unlike the methods found 
 inside definitions.
-2. A ``DynamicDDLmRC`` is a container that holds relations, whose
+2. A ``DynamicDDLmRC`` is a container that holds relations (ie tables), whose
 contents are described by a DDLm dictionary. It takes any ``DataSource``,
 including CIF data blocks. It is dynamic because it can derive missing
 values using dREL fragments in the dictionary. The resulting values are **not**
