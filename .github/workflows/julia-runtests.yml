@@ -1,0 +1,47 @@
+name: Run tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    env:
+            LD_LIBRARY_PATH: ${{ github.workspace }}/lib:/usr/lib:/lib:/lib64
+    strategy:
+      matrix:
+        julia-version: ['1.2', '1', 'nightly']
+        julia-arch: [x64, x86]
+        os: [ubuntu-latest]
+        exclude:
+          - os: macOS-latest
+            julia-arch: x86
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: jamesrhester/CrystInfoFramework.jl@master/cifapi_action
+      - name: check the file location
+        run: |
+                ls $GITHUB_WORKSPACE/lib
+                ldd $GITHUB_WORKSPACE/lib/libcif.so
+                set
+      - uses: julia-actions/setup-julia@latest
+        with:
+           version: ${{ matrix.julia-version }}
+      - uses: julia-actions/julia-buildpkg@latest
+        name: Run test no coverage
+      - uses: julia-actions/julia-runtest@latest
+        with:
+                coverage: 'false'
+      - name: Do the coverage run
+        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        uses: julia-actions/julia-runtest@latest
+      - name: Process the coverage run
+        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        run: |
+                       julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; LCOV.writefile("lcov.info",process_folder())'
+      - name: Upload coverage data
+        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        uses: coverallsapp/github-action@master
+        with:
+              github-token: ${{ secrets.GITHUB_TOKEN }}
+              path-to-lcov: './lcov.info'
