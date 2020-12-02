@@ -1,6 +1,6 @@
 #Testing dREL runtime support
 using CrystalInfoFramework
-using DataContainer
+using CrystalInfoFramework.DataContainer
 using CIF_dREL
 using Test
 
@@ -19,6 +19,6 @@ setup() = begin
     return DynamicDDLmRC(t,p)
 end
 
-#include("./dynamic.jl")
-#include("./expressions.jl")
+include("./dynamic.jl")
+include("./expressions.jl")
 include("./drel_exec.jl")

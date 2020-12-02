@@ -189,7 +189,7 @@ The form `__datablock[String]` refers to a category from the datablock and shoul
 be ignored.
 ==#
 
-ast_fix_indexing(ast_node,in_scope_list::Array{String,1},cifdic;
+ast_fix_indexing(ast_node,in_scope_list,cifdic;
                  lhs=nothing) = begin
     #println("$ast_node: in scope $in_scope_list")
     ixpr = :(:call,:f)  #dummy

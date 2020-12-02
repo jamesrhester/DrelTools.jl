@@ -194,6 +194,8 @@ drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalConta
     return m
 end
 
+drel_property_access(::Missing,obj::String,datablock::DynamicRelationalContainer) = missing
+
 # Generic fallback
 drel_property_access(a,b,c) = begin
     println("Not drel compatible: looking for $b in $(typeof(a)) using data from $(typeof(c))")

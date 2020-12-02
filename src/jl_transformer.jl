@@ -45,10 +45,10 @@ end
 
 TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[])= begin
     cat_list = unique!(append!(extra_cats,get_categories(data_dict)))
-    if dataname == "_type.contents"
-        println("Cats supplied $extra_cats: stacktrace\n")
-        for line in stacktrace() println("$line") end
-    end
+    #if dataname == "_type.contents"
+    #    println("Cats supplied $extra_cats: stacktrace\n")
+    #    for line in stacktrace() println("$line") end
+    #end
     is_category = false
     if lowercase(dataname) in cat_list   # a normal method
         target_cat = lowercase(dataname)
@@ -415,6 +415,8 @@ end
     if op in ("=","+=","-=")
         if length(lhs) == length(rhs) == 1
             result = Expr(Symbol(op),lhs[1],rhs[1])
+        elseif length(lhs) > 1 && length(rhs) == 1
+            result = Expr(Symbol(op),Expr(:tuple,lhs...),rhs[1])
         else
             result = Expr(Symbol(op),Expr(:tuple,lhs...),Expr(:tuple,rhs...))
         end

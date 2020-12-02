@@ -4,9 +4,9 @@ export add_definition_func, empty_cache!
 export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 export find_namespace
 
-import DataContainer:get_key_datanames, get_value, get_name
-import DataContainer:get_category, has_category, get_data, get_dictionary
-import DataContainer:select_namespace,get_namespaces
+import CrystalInfoFramework.DataContainer:get_key_datanames, get_value, get_name
+import CrystalInfoFramework.DataContainer:get_category, has_category, get_data, get_dictionary
+import CrystalInfoFramework.DataContainer:select_namespace,get_namespaces
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -45,7 +45,7 @@ Define a Julia method from dREL code contained in `drel_text` which calculates t
 defined in `dict`. All category names in `dict` and any additional names in `reserved` are recognised
 as categories.
 """
-make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary; reserved=String[]) = begin
+make_julia_code(drel_text::String,dataname::AbstractString,dict::abstract_cif_dictionary; reserved=AbstractString[]) = begin
     tree = Lerche.parse(drel_parser,drel_text)
     #println("Rule dict: $(get_rule_dict())")
     transformer = TreeToJulia(dataname,dict,extra_cats = reserved)
@@ -135,11 +135,12 @@ end
 DynamicDDLmRC(r::AbstractRelationalContainer) = begin
     nspaces = get_namespaces(r)
     d = Dict{String,Dict{String,Any}}()
+    c = Dict{String,Dict{String,CifCategory}}()
     for n in nspaces
         d[n] = Dict()
+        c[n] = Dict{String,CifCategory}()
     end
-    DynamicDDLmRC(r,get_dicts(r),d,
-                  Dict{String,Dict{String,CifCategory}}())
+    DynamicDDLmRC(r,get_dicts(r),d,c)
 end
 
 get_namespaces(d::DynamicDDLmRC) = collect(keys(d.value_cache))
@@ -187,6 +188,10 @@ cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
         println("WARNING: overwriting previously cached value for $name")
         println("Old length: $(length(d.value_cache[nspace][name]))")
         println("New length: $(length(value))")
+        if length(value) < 150
+            println("Old values: $(d.value_cache[nspace][name])")
+            println("New values: $(value)")
+        end
     end
     d.value_cache[nspace][lowercase(name)] = value
     invalidate_cache!(d,nspace,name)
@@ -304,15 +309,17 @@ Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
     throw(KeyError("$s"))
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::String) = begin
+Base.setindex!(d::DynamicDDLmRC,v,s::AbstractString) = begin
     nspace = find_namespace(d,s)
     setindex!(d,v,s,nspace)
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::String,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
+Base.setindex!(d::DynamicDDLmRC,v,s::AbstractString,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
 
-get_category(d::DynamicDDLmRC,s::String,nspace::String) = begin
-    if haskey(d.cat_cache[nspace],s) return d.cat_cache[nspace][s] end
+get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String) = begin
+    if haskey(d.cat_cache[nspace],s)
+        return d.cat_cache[nspace][s]
+    end
     dict = get_dictionary(d,nspace)
     if is_set_category(dict,s)   #an empty category is good enough
         d.cat_cache[nspace][s] = construct_category(d,s,nspace)
@@ -339,7 +346,7 @@ end
 """
 If no namespace is provided, try and find one based on the name
 """
-get_category(d::DynamicDDLmRC,s::String) = begin
+get_category(d::DynamicDDLmRC,s::AbstractString) = begin
     n = find_namespace(d,s)
     get_category(d,s,n)
 end
@@ -369,7 +376,7 @@ end
 #  Dynamic Category
 #
 
-get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
+get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = begin
     dict = get_dictionary(db,nspace)
     def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
@@ -404,25 +411,25 @@ get_default(db::DynamicRelationalContainer,s::String,nspace::String) = begin
 end
 
 """
-derive(b::DynamicRelationalContainer,dataname::String,nspace)
+derive(b::DynamicRelationalContainer,dataname::AbstractString,nspace)
 
 Derive values for `dataname` in `nspace` missing from `b`. Return `missing`
 if the category itself is missing, otherwise return an Array potentially
 containing missing values with one value for each row in the category.
 """
-derive(b::DynamicRelationalContainer,dataname::String,nspace) = begin
+derive(b::DynamicRelationalContainer,dataname::AbstractString,nspace) = begin
     dict = get_dictionary(b,nspace)
     target_loop = get_category(b,find_category(dict,dataname),nspace)
     if ismissing(target_loop) return missing end
     return derive(b,target_loop,dataname,dict,nspace)
 end
 
-derive(b::DynamicDDLmRC,dataname::String) = begin
+derive(b::DynamicDDLmRC,dataname::AbstractString) = begin
     nspaces = get_namespaces(b)
     derive(b,dataname,nspaces[])
 end
 
-derive(b::DynamicRelationalContainer,s::SetCategory,dataname::String,dict,nspace) = begin
+derive(b::DynamicRelationalContainer,s::SetCategory,dataname::AbstractString,dict,nspace) = begin
     obj = find_object(dict,dataname)
     if haskey(s,dataname) return s[Symbol(obj)] end
     if !has_drel_methods(dict) return missing end
@@ -445,7 +452,7 @@ derive(b::DynamicRelationalContainer,s::SetCategory,dataname::String,dict,nspace
     end
 end
 
-derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::String,dict,nspace) = begin
+derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::AbstractString,dict,nspace) = begin
     if length(s) == 0 return missing end
     obj = find_object(dict,dataname)
     if haskey(s,dataname) return s[Symbol(obj)] end
@@ -469,7 +476,7 @@ end
 derive(b::DynamicRelationalContainer,s::LegacyCategory,dataname,dict,nspace) = begin
     if length(s) == 0 return []
     else
-        throw(error("Category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
+        throw(error("WARNING: Legacy category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
     end
 end
 
@@ -479,7 +486,7 @@ This is called from within a dREL method when an item is
 found missing from a packet.
 ==#
     
-derive(p::CatPacket,obj::String,db) = begin
+derive(p::CatPacket,obj::AbstractString,db) = begin
     d = get_category(p)
     dict = get_dictionary(d)
     nspace = get_dic_namespace(dict)
@@ -512,7 +519,7 @@ Category methods create whole new categories
 
 ==#
 
-derive_category(b::DynamicRelationalContainer,cat::String,nspace) = begin
+derive_category(b::DynamicRelationalContainer,cat::AbstractString,nspace) = begin
     dict = get_dictionary(b,nspace)
     t = load_func_text(dict,cat,"Evaluation")
     if t == "" return end
@@ -562,7 +569,7 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol) = begin
     get_default(block,cp,obj,nspace)
 end
 
-add_new_func(b::DynamicRelationalContainer,s::String,nspace) = begin
+add_new_func(b::DynamicRelationalContainer,s::AbstractString,nspace) = begin
     dict = get_dictionary(b,nspace)
     # get all categories mentioned
     all_cats = String[]
@@ -573,7 +580,7 @@ add_new_func(b::DynamicRelationalContainer,s::String,nspace) = begin
     add_new_func(dict,s,all_cats)
 end
 
-add_new_func(d::abstract_cif_dictionary,s::String,special_names) = begin
+add_new_func(d::abstract_cif_dictionary,s::AbstractString,special_names) = begin
     t = load_func_text(d,s,"Evaluation")
     if t != ""
         r = make_julia_code(t,s,d,reserved=special_names)
@@ -585,7 +592,7 @@ add_new_func(d::abstract_cif_dictionary,s::String,special_names) = begin
     set_func!(d,s, r, eval(r))
 end
 
-add_new_func(d::abstract_cif_dictionary,s::String) = begin
+add_new_func(d::abstract_cif_dictionary,s::AbstractString) = begin
     println("Warning: recognising only categories from $(get_dic_name(d))")
     add_new_func(d,s,String[])
 end
@@ -616,7 +623,7 @@ derive an attribute.
 
 const all_set_ddlm = [("units","code"),("enumeration","default")]
 
-add_definition_func!(d::abstract_cif_dictionary,s::String) = begin
+add_definition_func!(d::abstract_cif_dictionary,s::AbstractString) = begin
     # set defaults
     r = Meta.parse("(a,b) -> missing")
     for (c,o) in all_set_ddlm

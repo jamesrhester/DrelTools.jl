@@ -1,7 +1,7 @@
 module CIF_dREL
 
 using CrystalInfoFramework
-using DataContainer
+using CrystalInfoFramework.DataContainer
 using DataFrames
 using Lerche
 using Serialization
