@@ -1,3 +1,5 @@
+![Testing](https://github.com/jamesrhester/CIF_dREL.jl/workflows/Run%20tests/badge.svg)
+![Coverage Status](https://coveralls.io/repos/github/jamesrhester/CIF_dREL.jl/badge.svg?branch=master)
 # CIF_dREL: A dREL to Julia translator
 
 ## Introduction
