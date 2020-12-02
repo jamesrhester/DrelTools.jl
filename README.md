@@ -12,8 +12,7 @@ use can be found in
 [the latest CIF core dictionary](https://github.com/COMCIFS/cif_core/cif_core.dic).
 
 This package is experimental.  Method and type names are subject to
-change. It is likely to run a lot faster in the future as optimisations
-are implemented.  Suggestions on speed improvement and new functionality
+change. Suggestions on speed improvement and new functionality
 are welcome.
 
 ## Installation
@@ -32,28 +31,30 @@ instructions or the installation setup can be improved.
 
 1. ``define_dict_funcs(c::Cifdic)`` will
 process all dREL functions found in the dictionary. This must be
-called if the dictionary contains a ``Function`` category.
+called if the dictionary contains a ``Function`` category that
+defines functions used in other dREL fragments.
 Note that dREL functions are like library functions
 that are not associated with data names, unlike the methods found 
 inside definitions.
-2. A ``dynamic_block`` is a CIF block that can evaluate missing datanames 
-using dREL code found in the dictionary for that dataname, potentially executing long
-chains of other evaluations.  The resulting values are **not**
-stored in the block, but are cached. The example below shows how a ``dynamic_block``
+2. A ``DynamicDDLmRC`` is a container that holds relations, whose
+contents are described by a DDLm dictionary. It takes any ``DataSource``,
+including CIF data blocks. It is dynamic because it can derive missing
+values using dREL fragments in the dictionary. The resulting values are **not**
+stored in the block, but are cached. The example below shows how a ``DynamicDDLmRC``
 is created from a data block and a dictionary.
-3. ``derive(d::dynamic_block,s::String)`` will derive the value of dataname
+3. ``derive(d::DynamicDDLmRC,s::String)`` will derive the value of dataname
 ``s`` based on other values in the block and dREL code found in the dictionary
 associated with ``d``.
 4. ``empty_cache!(d::dynamic_block)`` clears cached values from previous
 derivations.
 
 ```julia
-    p = Cifdic("/home/jrh/COMCIFS/cif_core/cif_core.dic")
+    p = DDLm_Dictionary("cif_core.dic")
     define_dict_funcs(p)    #add dREL Functions to dictionary
-    n = NativeCif(joinpath(@__DIR__,"nick1.cif"))
+    n = NativeCif("nick1.cif") #Read in a CIF file
     b = n["saly2_all_aniso"] #select a data block
-    c = assign_dictionary(b,p) 
-    db = dynamic_block(c) #create a dynamic block
+    t = TypedDataSource(b,p) #p describes the data in b
+    db = DynamicDDLmRC(t,p) #create a dynamic block
     # 
     # (Re)evaluate an item
     #
