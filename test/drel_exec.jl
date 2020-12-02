@@ -1,7 +1,7 @@
 # Test execution of dREL code
 
 setup() = begin
-    p = DDLm_Dictionary("/home/jrh/COMCIFS/cif_core/cif_core.dic")
+    p = DDLm_Dictionary(joinpath(@__DIR__,"cif_core.dic"))
     define_dict_funcs(p)
     n = NativeCif(joinpath(@__DIR__,"nick1.cif"))
     b = n["saly2_all_aniso"]
