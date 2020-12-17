@@ -43,6 +43,18 @@ already been processed.
     namespace::String
 end
 
+"""
+    TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[])
+
+`dataname` is the CIF data name to which the dREL fragment is attached. `data_dict` is a
+dictionary containing information about `data name` and its category. `is_validation`
+is unused. `att_dict` is also unused. `extra_cats` is a list of additional names 
+not contained in the dictionary which should also be treated as categories in the
+generated code.
+
+The `TreeToJulia` type is passed to `Lerche.transform` to transform a dREL AST into
+a Julia `Expr`.
+"""
 TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=String[])= begin
     cat_list = unique!(append!(extra_cats,get_categories(data_dict)))
     #if dataname == "_type.contents"
@@ -674,6 +686,12 @@ Utility functions
                                
 #== Changing dREL to Julia function calls ==#
 
+"""
+    transform_function_name(in_name,func_args)
+
+Transform dREL function `in_name` with arguments
+`func_args` to the equivalent Julia `Expr`.
+"""
 transform_function_name(in_name,func_args) = begin
     builtins = Dict(
         "table"=> :DrelTable,

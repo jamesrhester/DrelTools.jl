@@ -2,8 +2,8 @@
 
 setup() = begin
     p = DDLm_Dictionary(joinpath(@__DIR__,"cif_core.dic"))
-    define_dict_funcs(p)
-    n = NativeCif(joinpath(@__DIR__,"nick1.cif"))
+    define_dict_funcs!(p)
+    n = Cif(joinpath(@__DIR__,"nick1.cif"))
     b = n["saly2_all_aniso"]
     t = TypedDataSource(b,p)
     return DynamicDDLmRC(t,p)
@@ -57,7 +57,7 @@ end
 # Often seem to fail at this point
 @testset "Test value lookup" begin
     t = get_category(db,"atom_type","CifCore")
-    @test CIF_dREL.get_default(db,first(t),:cromer_mann_c,"CifCore") == 0.2508
+    @test dRELTools.get_default(db,first(t),:cromer_mann_c,"CifCore") == 0.2508
 end
 
 @testset "Test F_calc" begin

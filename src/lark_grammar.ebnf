@@ -9,7 +9,7 @@ const _drel_grammar_spec = raw"""
     COMMA : ","
     COLON : ":"
     SEMI : ";"
-    BAR : "|"
+    DOUBLECOLON : "::"
     PERIOD : "."
     PWR : "**"
     MULT : "*"
@@ -74,7 +74,7 @@ const _drel_grammar_spec = raw"""
     literal : SHORTSTRING | LONGSTRING | INTEGER | HEXINT | OCTINT | BININT | NULL | MISSING | real | imaginary 
     
     ident : ID 
-    nspace : ID BAR 
+    nspace : ID DOUBLECOLON 
     nident : [ nspace ] ident 
     
     enclosure : parenth_form | list_display | table_display 

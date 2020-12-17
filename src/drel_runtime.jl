@@ -8,6 +8,8 @@ using LinearAlgebra
 
 export drelvector,to_julia_array,drel_strip,drel_split,DrelTable
 
+import Base:getindex,setindex!,keys,values,iterate,length
+
 # a character can be compared to a single-character string
 Base.:(==)(c::Char,y::String) = begin
     if length(y) == 1
@@ -22,6 +24,11 @@ Base.:(+)(y::String,z::String) = y*z
 # We redefine vectors so that we can fix up post and pre
 # multiplication to always work
 
+"""
+A `drelvector` is a vector which adopts the correct
+dimension (column or row) to allow pre or post
+multiplication without explicit transposition. 
+"""
 struct drelvector <: AbstractVector{Number}
     elements::Vector{Number}
 end
@@ -38,50 +45,6 @@ Base.:(*)(a::Array,b::drelvector) = begin
     return res
 end
 
-#    **DrelTable**
-#
-# In order to capture any deviations from normal Julia
-# we define our own Dict equivalent.  The most obvious
-# deviation is being able to match CaselessStrings when
-# used as keys.
-#
-struct DrelTable <: AbstractDict{Union{String,CaselessString,Integer},Any}
-    keys::Array{Union{String,CaselessString,Integer},1}
-    values::Array{Any,1}
-end
-
-DrelTable() = DrelTable([],[])
-
-Base.keys(d::DrelTable) = d.keys
-Base.values(d::DrelTable) = d.values
-Base.getindex(d::DrelTable,k) = begin
-    index = findfirst(x->isequal(x,k),d.keys)
-    if isnothing(index) throw(KeyError(k)) end
-    return d.values[index]
-end
-
-Base.setindex!(d::DrelTable,v,k) = begin
-    index = findfirst(x->isequal(x,k),d.keys)
-    if isnothing(index)
-        push!(d.keys,k)
-        push!(d.values,v)
-    else
-        d.values[index] = v
-    end
-end
-
-Base.iterate(d::DrelTable) = begin
-    if length(d) == 0 return nothing end
-    return Pair(d.keys[1],d.values[1]),2
-end
-
-Base.iterate(d::DrelTable,state) = begin
-    if length(d) < state return nothing end
-    return Pair(d.keys[state],d.values[state]),state+1
-end
-
-Base.length(d::DrelTable) = length(d.keys)
-
 # premultiply: transpose first
 Base.:(*)(a::drelvector,b::Array{N,2} where N) = drelvector(permutedims(a.elements) * b)
 
@@ -97,6 +60,69 @@ LinearAlgebra.cross(a::drelvector,b::drelvector) = drelvector(cross(vec(a.elemen
 # Broadcasting, so we get a drelvector when working with scalars
 Base.BroadcastStyle(::Type{<:drelvector}) = Broadcast.ArrayStyle{drelvector}()
 Base.similar(a::Broadcast.Broadcasted{Broadcast.ArrayStyle{drelvector}},::Type{ElType}) where ElType = drelvector(similar(Array{ElType},axes(a)))
+
+#    **DrelTable**
+#
+# In order to capture any deviations from normal Julia
+# we define our own Dict equivalent.  The most obvious
+# deviation is being able to match CaselessStrings when
+# used as keys.
+#
+
+"""
+A `DrelTable` is almost like a Julia `Dict`, but it must allow
+`CaselessString` comparisons with `String`, and the types of the
+keys are restricted.
+"""
+struct DrelTable <: AbstractDict{Union{String,CaselessString,Integer},Any}
+    keys::Array{Union{String,CaselessString,Integer},1}
+    values::Array{Any,1}
+end
+
+DrelTable() = DrelTable([],[])
+
+keys(d::DrelTable) = d.keys
+values(d::DrelTable) = d.values
+
+"""
+    getindex(d::DrelTable,k)
+
+`d[k]` find the value corresponding to `k`, where caseless comparisons are
+performed for string values.
+"""
+getindex(d::DrelTable,k) = begin
+    index = findfirst(x->isequal(x,k),d.keys)
+    if isnothing(index) throw(KeyError(k)) end
+    return d.values[index]
+end
+
+"""
+    setindex!(d::DrelTable,v,k)
+
+Set `d[k]` to `v`, where a caseless comparison is performed for `k`.
+"""
+setindex!(d::DrelTable,v,k) = begin
+    index = findfirst(x->isequal(x,k),d.keys)
+    if isnothing(index)
+        push!(d.keys,k)
+        push!(d.values,v)
+    else
+        d.values[index] = v
+    end
+end
+
+iterate(d::DrelTable) = begin
+    if length(d) == 0 return nothing end
+    return Pair(d.keys[1],d.values[1]),2
+end
+
+iterate(d::DrelTable,state) = begin
+    if length(d) < state return nothing end
+    return Pair(d.keys[state],d.values[state]),state+1
+end
+
+length(d::DrelTable) = length(d.keys)
+
 
 
 #== Convert the dREL array representation to the Julia representation...
@@ -153,6 +179,13 @@ dictionary via the category, which holds the relevant dictionary.
 
 ==#
 
+"""
+    drel_property_access(cp,obj,datablock)
+
+This call corresponds to `cp.obj` in dREL code. If `obj` is not a property of `cp`,
+`datablock` is used to try to derive a value, returning `missing` for all failures
+and caching the result in `datablock` if successful.
+"""
 drel_property_access(cp::CatPacket,obj::String,datablock::DynamicRelationalContainer) = begin
     source_cat = get_category(cp)
     catname = get_name(source_cat)

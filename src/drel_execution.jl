@@ -1,5 +1,5 @@
 #== This module defines functions for executing dREL code ==#
-export dynamic_block, define_dict_funcs, derive
+export dynamic_block, define_dict_funcs!, derive
 export add_definition_func, empty_cache!
 export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 export find_namespace
@@ -7,6 +7,8 @@ export find_namespace
 import CrystalInfoFramework.DataContainer:get_key_datanames, get_value, get_name
 import CrystalInfoFramework.DataContainer:get_category, has_category, get_data, get_dictionary
 import CrystalInfoFramework.DataContainer:select_namespace,get_namespaces
+
+import Base:keys,haskey,show,getindex,setindex!
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -21,9 +23,9 @@ const drel_parser = Serialization.deserialize(joinpath(@__DIR__,"..","deps","dre
 
 # Parse and output proto-Julia code using Lerche
 
-get_drel_methods(cd::abstract_cif_dictionary) = begin
+get_drel_methods(cd::AbstractCifDictionary) = begin
     has_meth = cd[:method][cd[:method][!,:expression] .!= nothing,(:expression,:master_id)]
-    println("Found $(length(has_meth)) methods")
+    #println("Found $(length(has_meth)) methods")
     return has_meth    #category methods as well
 end
 
@@ -39,13 +41,13 @@ end
 (8) Assigning types to any dictionary items for which this is known
 ==#
 """
-make_julia_code(drel_text::String,dataname::String,dict::abstract_cif_dictionary; reserved=[])
+    make_julia_code(drel_text,dataname,dict; reserved=[])
 
 Define a Julia method from dREL code contained in `drel_text` which calculates the value of `dataname`
 defined in `dict`. All category names in `dict` and any additional names in `reserved` are recognised
 as categories.
 """
-make_julia_code(drel_text::String,dataname::AbstractString,dict::abstract_cif_dictionary; reserved=AbstractString[]) = begin
+make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
     tree = Lerche.parse(drel_parser,drel_text)
     #println("Rule dict: $(get_rule_dict())")
     transformer = TreeToJulia(dataname,dict,extra_cats = reserved)
@@ -77,19 +79,25 @@ make_julia_code(drel_text::String,dataname::AbstractString,dict::abstract_cif_di
     return parsed
 end
 
-define_dict_funcs(c::abstract_cif_dictionary) = begin
+"""
+    define_dict_funcs!(dict)
+
+Find and transform to Julia all dREL functions defined in `dict`. This must be called in order
+for these functions to be available to dREL methods defined in `dict`.
+"""
+define_dict_funcs!(dict) = begin
     #Parse and evaluate all dictionary-defined functions and store
-    func_cat,all_funcs = get_dict_funcs(c)
+    func_cat,all_funcs = get_dict_funcs(dict)
     for f in all_funcs
         println("Now processing $f")         
-        full_def = c[find_name(c,func_cat,f)]
+        full_def = dict[find_name(dict,func_cat,f)]
         entry_name = full_def[:definition].id[]
         full_name = lowercase(full_def[:name].object_id[])
         func_text = full_def[:method][!,:expression][1]
         println("Function text: $func_text")
-        result = make_julia_code(func_text,entry_name,c)
+        result = make_julia_code(func_text,entry_name,dict)
         println("Transformed text: $result")
-        set_func!(c,full_name,result,eval(result))  #store in dictionary
+        set_func!(dict,full_name,result,eval(result))  #store in dictionary
     end
 end
 
@@ -112,16 +120,28 @@ abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
 
 struct DynamicDDLmRC <: DynamicRelationalContainer
     data
-    dict::Dict{String,abstract_cif_dictionary} #provides dREL functions
+    dict::Dict{String,AbstractCifDictionary} #provides dREL functions
     value_cache::Dict{String,Dict{String,Any}} #namespace indexed
     cat_cache::Dict{String,Dict{String,CifCategory}}
 end
 
-DynamicDDLmRC(ds::DataSource, dict::abstract_cif_dictionary) = begin
+"""
+    DynamicDDLmRC(ds, dict::AbstractCifDictionary)
+
+Create a `DynamicDDLmRC` object from `ds` with relational
+structure defined by `dict`. If `dict` includes dREL methods describing
+mathematical relationships between data names, use these to derive
+and cache missing values.
+
+`ds` should provide the `DataSource` trait.
+
+A `DynamicDDLmRC` is itself a `DataSource`.
+"""
+DynamicDDLmRC(ds::DataSource, dict::AbstractCifDictionary) = begin
     DynamicDDLmRC(IsDataSource(),ds,dict)
 end
 
-DynamicDDLmRC(ds,dict::abstract_cif_dictionary) = begin
+DynamicDDLmRC(ds,dict::AbstractCifDictionary) = begin
     DynamicDDLmRC(DataSource(ds),ds,dict)
 end
 
@@ -161,6 +181,11 @@ find_namespace(d::DynamicDDLmRC,dataname) = begin
     potentials[]
 end
 
+"""
+    empty_cache!(d)
+
+Remove all cached data name values computed for `d`.
+"""
 empty_cache!(d::DynamicDDLmRC) = begin
     for k in keys(d.value_cache)
         empty!(d.value_cache[k])
@@ -183,6 +208,9 @@ cache_value!(d::DynamicDDLmRC,name::String,value) = begin
     cache_value!(d,nspace,lowercase(name),value)
 end
 
+#
+# We want arrays of missing values to go through here as placeholders
+#
 cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
     if haskey(d.value_cache[nspace],lowercase(name))
         println("WARNING: overwriting previously cached value for $name")
@@ -201,11 +229,11 @@ end
 # Don't bother caching missing values
 # Assume that any cached categories will still be valid
 #
-cache_value!(d::DynamicDDLmRC,nspace::String,name::String,index::Int,value) = begin
-    if !ismissing(value)
-        d.value_cache[nspace][lowercase(name)][index] = value
-    end
+cache_value!(d,nspace,name,index,value) = begin
+    d.value_cache[nspace][lowercase(name)][index] = value
 end
+
+cache_value!(d,nspace,name,index,value::Missing) = nothing
 
 cache_value!(d::DynamicDDLmRC,name::String,index::Int,value) = begin
     cache_value!(d,find_namespace(d,name),name,index,value)
@@ -240,9 +268,14 @@ select_namespace(d::DynamicDDLmRC,nspace) = begin
 end
 
 """
-All keys returned, even if duplicated
+    keys(d::DynamicDDLmRC)
+
+Return all data names that have associated values in `d`. If multiple
+namespaces are present, some data names may be duplicated. If calculations
+have been performed to derive data name values, those data names will
+be included.
 """
-Base.keys(d::DynamicDDLmRC) = begin
+keys(d::DynamicDDLmRC) = begin
     real_keys = keys(d.data)
     nspaces = get_namespaces(d)
     vc_keys = (keys(d.value_cache[n]) for n in nspaces)
@@ -250,48 +283,62 @@ Base.keys(d::DynamicDDLmRC) = begin
 end
 
 """
+    keys(d::DynamicDDLmRC,nspace)
+
 Namespace-aware version of `keys`
 """
-Base.keys(d::DynamicDDLmRC,nspace::String) = begin
+keys(d::DynamicDDLmRC,nspace) = begin
     f = select_namespace(d,nspace)
     Iterators.flatten((keys(f.data),keys(f.value_cache[nspace])))
 end
 
-Base.show(io::IO,d::DynamicDDLmRC) = begin
+show(io::IO,d::DynamicDDLmRC) = begin
     show(io,d.data)
     show(io,d.value_cache)
 end
 
 """
+    haskey(d::DynamicDDLmRC,s)
+
 Return true if any instance found of `s` in `d`
 """
-Base.haskey(d::DynamicDDLmRC,s::String) = begin
+haskey(d::DynamicDDLmRC,s::String) = begin
     return s in keys(d)
 end
 
-Base.haskey(d::DynamicDDLmRC,s::String,n::String) = begin
+"""
+    haskey(d::DynamicDDLmRC,s,n)
+
+Return true if any instance found of `s` from namespace `n` in `d`
+"""
+haskey(d::DynamicDDLmRC,s,n) = begin
     return s in keys(d,n)
 end
 
 """
-`s` is always a canonical data name, and the value returned will
-be all values for that data name in the same order as the key values.
-Note that new values can only be derived via categories.
-As we have namespaces, getindex only works if the namespace is included
-in `s`
+    getindex(d::DynamicDDLmRC,s)
+
+`d[s]` returns all values for that data name in the same order as the key values,
+so that they may be interpreted as a column of values in correct order, deriving
+missing values from dREL methods if available.
+
+If `s` appears in multiple namespaces within `d`, an error is raised.
 """
-Base.getindex(d::DynamicDDLmRC,s::AbstractString) = begin
+getindex(d::DynamicDDLmRC,s) = begin
     n = find_namespace(d,s)
     return d[s,n]
 end
 
 """
-d[s,nspace]
+    getindex(d::DynamicDDLmRC,s,nspace)
 
-Return from `d` the value of dataname `s` from namespace `nspace`, with
-derivation of missing values.
+`d[s,nspace]` returns the values of dataname `s` from namespace `nspace` in `d`, with
+derivation of missing values. Values
+are returned in an order corresponding to the order in which key data name values are
+provided, meaning that the returned values can be assembled into a table without
+further manipulation.
 """
-Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
+getindex(d::DynamicDDLmRC,s,nspace) = begin
     ls = lowercase(s)
     small_r = select_namespace(d,nspace)
     if haskey(small_r.data,ls) return small_r.data[ls] end
@@ -309,13 +356,33 @@ Base.getindex(d::DynamicDDLmRC,s::AbstractString,nspace::AbstractString) = begin
     throw(KeyError("$s"))
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::AbstractString) = begin
+"""
+    setindex!(d::DynamicDDLmRC,v,s)
+    
+Set the value of `s` in `d` to `v`. The underlying data source is not changed,
+instead values are set in the cache and will be deleted by `empty_cache!`.
+"""
+setindex!(d::DynamicDDLmRC,v,s) = begin
     nspace = find_namespace(d,s)
     setindex!(d,v,s,nspace)
 end
 
-Base.setindex!(d::DynamicDDLmRC,v,s::AbstractString,nspace::String) = d.value_cache[nspace][lowercase(s)]=v
+"""
+    setindex!(d::DynamicDDLmRC,v,s,nspace)
 
+Set the value of `s` from namespace `nspace` in `d` to `v`. 
+The underlying data source is not changed,
+instead values are set in the cache and will be deleted by `empty_cache!`.
+"""
+setindex!(d::DynamicDDLmRC,v,s,nspace) = d.value_cache[nspace][lowercase(s)]=v
+
+"""
+    get_category(d::DynamicDDLmRC,s,nspace)
+
+Return a `CifCategory` named `s` in namespace `nspace` from `d`, creating the
+category using dREL category methods if missing. If `s` is already present, no further
+data names from that category are derived.
+"""
 get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String) = begin
     if haskey(d.cat_cache[nspace],s)
         return d.cat_cache[nspace][s]
@@ -344,9 +411,14 @@ get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String) = begin
 end
 
 """
-If no namespace is provided, try and find one based on the name
+    get_category(d::DynamicDDLmRC,s)
+
+Return a `CifCategory` named `s` from `d`, creating the
+category using dREL category methods if missing. If `s` is already present, no further
+data names from that category are derived. If `s` is ambiguous because it is 
+present in multiple namespaces, an error is raised.
 """
-get_category(d::DynamicDDLmRC,s::AbstractString) = begin
+get_category(d::DynamicDDLmRC,s) = begin
     n = find_namespace(d,s)
     get_category(d,s,n)
 end
@@ -411,7 +483,7 @@ get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = b
 end
 
 """
-derive(b::DynamicRelationalContainer,dataname::AbstractString,nspace)
+    derive(b::DynamicRelationalContainer,dataname,nspace)
 
 Derive values for `dataname` in `nspace` missing from `b`. Return `missing`
 if the category itself is missing, otherwise return an Array potentially
@@ -476,7 +548,7 @@ end
 derive(b::DynamicRelationalContainer,s::LegacyCategory,dataname,dict,nspace) = begin
     if length(s) == 0 return []
     else
-        throw(error("WARNING: Legacy category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
+        throw(error("Legacy category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
     end
 end
 
@@ -580,7 +652,7 @@ add_new_func(b::DynamicRelationalContainer,s::AbstractString,nspace) = begin
     add_new_func(dict,s,all_cats)
 end
 
-add_new_func(d::abstract_cif_dictionary,s::AbstractString,special_names) = begin
+add_new_func(d::AbstractCifDictionary,s::AbstractString,special_names) = begin
     t = load_func_text(d,s,"Evaluation")
     if t != ""
         r = make_julia_code(t,s,d,reserved=special_names)
@@ -592,7 +664,7 @@ add_new_func(d::abstract_cif_dictionary,s::AbstractString,special_names) = begin
     set_func!(d,s, r, eval(r))
 end
 
-add_new_func(d::abstract_cif_dictionary,s::AbstractString) = begin
+add_new_func(d::AbstractCifDictionary,s::AbstractString) = begin
     println("Warning: recognising only categories from $(get_dic_name(d))")
     add_new_func(d,s,String[])
 end
@@ -608,22 +680,15 @@ value.
 
 ==#
 
+const all_set_ddlm = [("units","code"),("enumeration","default")]
+
 """
-add_definition_func(dictionary,dataname)
+    add_definition_func(dictionary,dataname)
 
 Add a method that adjusts the definition of dataname by defining
 a DDLm attribute.
-
-TODO: add multiple definition funcs
-
-We do not define any function for those cases in which there is
-an attribute defined. This should cause errors if we attempt to
-derive an attribute.
 """
-
-const all_set_ddlm = [("units","code"),("enumeration","default")]
-
-add_definition_func!(d::abstract_cif_dictionary,s::AbstractString) = begin
+add_definition_func!(d,s) = begin
     # set defaults
     r = Meta.parse("(a,b) -> missing")
     for (c,o) in all_set_ddlm

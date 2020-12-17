@@ -195,8 +195,8 @@ loop_
   _method.expression
   Evaluation
 ;
-loop c as ddl2|category_key
-ddlm|category_key(.master_id = c.id,
+loop c as ddl2::category_key
+ddlm::category_key(.master_id = c.id,
                   .name = c.name)
 ;
 save_
@@ -252,7 +252,7 @@ loop_
            .scope = 'Item'
            )
    }
-   loop c as ddl2|category {
+   loop c as ddl2::category {
    definition(.id = c.id,
            .master_id = c.id,
            .class = 'Loop',
@@ -488,7 +488,7 @@ loop_
                    .text = i.description
                   )
    }
-   loop c as ddl2|category {
+   loop c as ddl2::category {
        description(.master_id = c.id,
                    .text = c.description
                   )
@@ -681,8 +681,8 @@ save_DICTIONARY
     _method.expression
     Evaluation
 ;
-loop dd as ddl2|dictionary {
-    ddlm|dictionary(.title = dd.title,
+loop dd as ddl2::dictionary {
+    ddlm::dictionary(.title = dd.title,
                     .version = dd.version
                     )
 }
@@ -745,7 +745,7 @@ save_dictionary.date
     Evaluation
 ;
     latest = '1900-01-01'
-    loop d as ddlm|dictionary_audit {
+    loop d as ddlm::dictionary_audit {
     if (d.date > latest) {
          latest = d.date
          }
@@ -874,8 +874,8 @@ loop_
     _method.expression
     Evaluation
 ;
-loop dd as ddl2|dictionary {
-    ddlm|dictionary.title = dd.title
+loop dd as ddl2::dictionary {
+    ddlm::dictionary.title = dd.title
 }
 ;
 
@@ -922,8 +922,8 @@ loop_
     _method.expression
     Evaluation
 ;
-loop dd as ddl2|dictionary {
-    ddlm|dictionary.version = dd.version
+loop dd as ddl2::dictionary {
+    ddlm::dictionary.version = dd.version
 }
 ;
 
@@ -957,7 +957,7 @@ Evaluation
         _dictionary_audit(.version = dh.version,
                           .date    = dh.update,
                           .revision = dh.revision,
-                          .master_id = ddlm|dictionary.title
+                          .master_id = ddlm::dictionary.title
                           )
     }
 ;
@@ -2040,7 +2040,7 @@ loop i as item {
     name(.master_id = i.name
         )
 }
-loop c as ddl2|category {
+loop c as ddl2::category {
     name(.master_id = c.id)
     }
 ;
@@ -2568,7 +2568,7 @@ loop n as name {
         }
 }       
 # Key overrides Link
-loop ck as ddlm|category_key {
+loop ck as ddlm::category_key {
     if (ck.name == type.master_id)
         type.purpose = 'Key'
         }

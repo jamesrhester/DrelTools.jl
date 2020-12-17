@@ -54,7 +54,7 @@ Delimiters are discussed in the context of their use, below.
     COMMA = ","
     COLON = ":"
     SEMI = ";"
-    BAR = "|"
+    DOUBLECOLON = "::"
 
 Operators
 ~~~~~~~~~
@@ -198,7 +198,7 @@ an action to.::
 An identifier can be prefixed by a namespace to allow disambiguation where
 several dictionaries are available in the context.::
 
-    nspace = ID BAR ;
+    nspace = ID DOUBLECOLON ;
 
 Namespaces only make sense in certain contexts, so we provide a production
 for those cases.::

@@ -1,5 +1,5 @@
-name = "CIF_dREL"
-uuid = "828e923e-3bcf-11e9-1efc-b9e921b3bbf6"
+name = "dRELTools"
+uuid = "fc805444-c5ec-4e06-bf74-6216be16ab28"
 authors = ["James.Hester <jxh@ansto.gov.au>"]
 version = "0.1.0"
 
