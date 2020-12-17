@@ -1,6 +1,6 @@
-![Testing](https://github.com/jamesrhester/CIF_dREL.jl/workflows/Run%20tests/badge.svg)
-![Coverage Status](https://coveralls.io/repos/github/jamesrhester/CIF_dREL.jl/badge.svg?branch=master)
-# CIF_dREL: A dREL to Julia translator
+![Testing](https://github.com/jamesrhester/dRELTools.jl/workflows/Run%20tests/badge.svg)
+![Coverage Status](https://coveralls.io/repos/github/jamesrhester/dRELTools.jl/badge.svg?branch=master)
+# dRELTools: A dREL to Julia translator
 
 ## Introduction
 
@@ -18,7 +18,7 @@ are welcome.
 ## Installation
 
 Install Julia.  At the Pkg prompt (ie after entering `]`) type
-`add CIF_dREL`.  Simply put `using CIF_dREL` at the top of any
+`add dRELTools`.  Simply put `using dRELTools` at the top of any
 Julia code that uses methods from this package.
 
 Note that CIF support is provided by the [CrystalInfoFramework](https://github.com/jamesrhester/CrystalInfoFramework.jl) package, which you will probably also need to install in order to read in CIF
