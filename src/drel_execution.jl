@@ -1,14 +1,3 @@
-#== This module defines functions for executing dREL code ==#
-export dynamic_block, define_dict_funcs!, derive
-export add_definition_func, empty_cache!
-export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
-export find_namespace
-
-import CrystalInfoFramework.DataContainer:get_key_datanames, get_value, get_name
-import CrystalInfoFramework.DataContainer:get_category, has_category, get_data, get_dictionary
-import CrystalInfoFramework.DataContainer:select_namespace,get_namespaces
-
-import Base:keys,haskey,show,getindex,setindex!
 
 # Configuration
 #const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
@@ -40,6 +29,7 @@ end
 (7) turning set categories into packets
 (8) Assigning types to any dictionary items for which this is known
 ==#
+
 """
     make_julia_code(drel_text,dataname,dict; reserved=[])
 
@@ -300,16 +290,16 @@ end
 """
     haskey(d::DynamicDDLmRC,s)
 
-Return true if any instance found of `s` in `d`
+`true` if any instance found of `s` in `d`.
 """
-haskey(d::DynamicDDLmRC,s::String) = begin
+haskey(d::DynamicDDLmRC,s) = begin
     return s in keys(d)
 end
 
 """
     haskey(d::DynamicDDLmRC,s,n)
 
-Return true if any instance found of `s` from namespace `n` in `d`
+`true` if any instance found of `s` from namespace `n` in `d`.
 """
 haskey(d::DynamicDDLmRC,s,n) = begin
     return s in keys(d,n)
@@ -377,7 +367,7 @@ instead values are set in the cache and will be deleted by `empty_cache!`.
 setindex!(d::DynamicDDLmRC,v,s,nspace) = d.value_cache[nspace][lowercase(s)]=v
 
 """
-    get_category(d::DynamicDDLmRC,s,nspace)
+    get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String)
 
 Return a `CifCategory` named `s` in namespace `nspace` from `d`, creating the
 category using dREL category methods if missing. If `s` is already present, no further
@@ -683,7 +673,7 @@ value.
 const all_set_ddlm = [("units","code"),("enumeration","default")]
 
 """
-    add_definition_func(dictionary,dataname)
+    add_definition_func!(dictionary,dataname)
 
 Add a method that adjusts the definition of dataname by defining
 a DDLm attribute.
