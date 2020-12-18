@@ -27,6 +27,10 @@ files.
 Please advise of any difficulties in installation so that either these
 instructions or the installation setup can be improved.
 
+## Documentation
+
+Documentation is available [here](https://jamesrhester.github.io/dRELTools.jl/dev/).
+
 ## Usage
 
 1. ``define_dict_funcs(c::Cifdic)`` will
