@@ -17,5 +17,5 @@ jobs:
            version: '1.5'
       - name: Generate documentation
         run: |
-           julia --project -e 'using Pkg; Pkg.instantiate()'
+           julia --project -e 'using Pkg; Pkg.instantiate();Pkg.build("dRELTools")'
            julia --project docs/make.jl  
