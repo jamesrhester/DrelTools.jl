@@ -57,7 +57,7 @@ jobs:
       - uses: jamesrhester/CrystalInfoFramework.jl/.github/actions/cifapi_action@master
       - uses: julia-actions/setup-julia@latest
         with:
-           version: '1'
+           version: '1.5'
       - name: Generate documentation
         run: |
            julia -e 'using Pkg; Pkg.instantiate()'
