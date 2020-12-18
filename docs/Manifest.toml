@@ -233,8 +233,8 @@ uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
 [[dRELTools]]
 deps = ["CrystalInfoFramework", "DataFrames", "Lerche", "LinearAlgebra", "Serialization"]
-git-tree-sha1 = "5d66a90567876affabd1edd16da48f3ef667be6b"
+git-tree-sha1 = "978c7fe548ef90587a2b80a8f38d8e99db6341d6"
 repo-rev = "master"
-repo-url = ".."
+repo-url = "https://github.com/jamesrhester/dRELTools.jl"
 uuid = "fc805444-c5ec-4e06-bf74-6216be16ab28"
 version = "0.1.0"
