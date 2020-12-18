@@ -60,5 +60,5 @@ jobs:
            version: '1'
       - name: Generate documentation
         run: |
-           julia --project=docs/ -e 'using Pkg; Pkg.instantiate()'
-           julia --project=docs/ docs/make.jl  
+           julia -e 'using Pkg; Pkg.instantiate()'
+           julia docs/make.jl  
