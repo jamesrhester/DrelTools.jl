@@ -1,6 +1,6 @@
-![Testing](https://github.com/jamesrhester/dRELTools.jl/workflows/Run%20tests/badge.svg)
-![Coverage Status](https://coveralls.io/repos/github/jamesrhester/dRELTools.jl/badge.svg?branch=master)
-# dRELTools: A dREL to Julia translator
+![Testing](https://github.com/jamesrhester/DrelTools.jl/workflows/Run%20tests/badge.svg)
+![Coverage Status](https://coveralls.io/repos/github/jamesrhester/DrelTools.jl/badge.svg?branch=master)
+# DrelTools: A dREL to Julia translator
 
 ## Introduction
 
@@ -18,7 +18,7 @@ are welcome.
 ## Installation
 
 Install Julia.  At the Pkg prompt (ie after entering `]`) type
-`add dRELTools`.  Simply put `using dRELTools` at the top of any
+`add DrelTools`.  Simply put `using DrelTools` at the top of any
 Julia code that uses methods from this package.
 
 Note that CIF support is provided by the [CrystalInfoFramework](https://github.com/jamesrhester/CrystalInfoFramework.jl) package, which you will probably also need to install in order to read in CIF
@@ -29,7 +29,7 @@ instructions or the installation setup can be improved.
 
 ## Documentation
 
-Documentation is available [here](https://jamesrhester.github.io/dRELTools.jl/dev/).
+Documentation is available [here](https://jamesrhester.github.io/DrelTools.jl/dev/).
 
 ## Usage
 

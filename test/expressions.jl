@@ -37,7 +37,7 @@ end
 
 @testset "Test namespace presence" begin
     t = DDLm_Dictionary(joinpath(@__DIR__,"ddlm_from_ddl2.dic"))
-    dRELTools.add_new_func(t,"_dictionary.date")
+    DrelTools.add_new_func(t,"_dictionary.date")
     println(t.func_text["_dictionary.date"])
 end
 
@@ -48,6 +48,6 @@ end
          with ce as category_examples
          category_examples.detail = description_example[.case=ce.case,.master_id=ce.id].detail
         """
-    roughtext = dRELTools.make_julia_code(rawtext,"_category_examples.detail",t)
+    roughtext = DrelTools.make_julia_code(rawtext,"_category_examples.detail",t)
     println(roughtext)
 end

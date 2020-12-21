@@ -1,7 +1,7 @@
 #Testing dREL runtime support
 using CrystalInfoFramework
 using CrystalInfoFramework.DataContainer
-using dRELTools
+using DrelTools
 using Test
 
 prepare_system() = begin

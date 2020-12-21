@@ -39,5 +39,5 @@ semantics and recursive calculation.
 ```@docs
 drelvector
 DrelTable
-dRELTools.drel_property_access(cp,obj,datablock::DynamicRelationalContainer)
+DrelTools.drel_property_access(cp,obj,datablock::DynamicRelationalContainer)
 ```

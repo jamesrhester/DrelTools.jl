@@ -57,7 +57,7 @@ end
 # Often seem to fail at this point
 @testset "Test value lookup" begin
     t = get_category(db,"atom_type","CifCore")
-    @test dRELTools.get_default(db,first(t),:cromer_mann_c,"CifCore") == 0.2508
+    @test DrelTools.get_default(db,first(t),:cromer_mann_c,"CifCore") == 0.2508
 end
 
 @testset "Test F_calc" begin

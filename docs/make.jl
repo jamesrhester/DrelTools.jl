@@ -1,4 +1,4 @@
-using Documenter, dRELTools 
+using Documenter, DrelTools 
 
 makedocs(sitename="dREL Tools documentation",
 	  format = Documenter.HTML(
@@ -13,5 +13,5 @@ makedocs(sitename="dREL Tools documentation",
 	  )
 
 deploydocs(
-    repo = "github.com/jamesrhester/dRELTools.jl.git",
+    repo = "github.com/jamesrhester/DrelTools.jl.git",
 )

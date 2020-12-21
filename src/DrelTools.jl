@@ -1,4 +1,4 @@
-module dRELTools 
+module DrelTools 
 
 using CrystalInfoFramework
 using CrystalInfoFramework.DataContainer
