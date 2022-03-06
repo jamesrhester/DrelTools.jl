@@ -88,7 +88,7 @@ const _drel_grammar_spec = raw"""
     table_entry : SHORTSTRING  COLON  expression 
     att_primary : nident | attributeref | subscription | call 
 ?primary : att_primary | literal | enclosure 
-    attributeref : att_primary "."  ( ID | INTEGER )  
+    attributeref : att_primary PERIOD  ( ID | INTEGER )  
     subscription : primary  "["  (proper_slice | slice_list | dotlist)  "]" 
     dotlist :  dotlist_element ("," dotlist_element )* 
     dotlist_element : ("."  ident  "="  expression)

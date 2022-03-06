@@ -97,7 +97,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             if ast_node.args[2] in keys(in_scope_dict)
                 # if assignment to '__packet', look further
                 target_cat = in_scope_dict[ast_node.args[2]]
-                println("For $(ast_node.args[2]), target is $target_cat")
+                @debug "For $(ast_node.args[2]), target is $target_cat"
                 if in_scope_dict[ast_node.args[2]] == "__packet"
                     target_cat = in_scope_dict[Symbol("__packet")]
                 end
@@ -106,7 +106,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             elseif typeof(ast_node.args[2]) != Expr && String(ast_node.args[2]) in set_cats
                 return ast_construct_type(ast_node,cifdic,String(ast_node.args[2]),String(ast_node.args[3]))
             else
-                println("WARNING: property access using unrecognised object $(ast_node)")
+                @warn "property access using unrecognised object $(ast_node)"
                 ixpr.head = ast_node.head
                 ixpr.args = ast_node.args
                 return ixpr
@@ -127,8 +127,8 @@ ast_assign_retval(ast_node,cifdic,cat,obj) = begin
         if ast_node.head == :return
             final_type,final_cont = get_julia_type_name(cifdic,cat,obj)
             if final_type == :CaselessString && final_cont == "Single"
-                ast_node = :(return $final_type($(ast_node.args[1])))
-                println("Return statement now $ast_node")
+                ast_node = :(if !ismissing($(ast_node.args[1])) return $final_type($(ast_node.args[1])) else return $(ast_node.args[1]) end)
+                @debug "Return statement now $ast_node"
                 return ast_node
             else
                 return ast_node
@@ -196,7 +196,7 @@ ast_fix_indexing(ast_node,in_scope_list,cifdic;
     if typeof(ast_node) == Expr
         if ast_node.head == :(=)
             # we only care if the final type is tagged as a categoryobject or is in scope
-            println("Found assignment for $ast_node")
+            @debug "Found assignment for $ast_node"
             lh = ast_node.args[1]
             # this is for the filtering
             ixpr.head = ast_node.head
@@ -216,34 +216,34 @@ ast_fix_indexing(ast_node,in_scope_list,cifdic;
             push!(in_scope_list,String(lhs))
             return ast_node
         # Find category access (new style)
-        elseif lhs != nothing && ast_node.head == :call && ast_node.args[1] == :get_category && ast_node.args[2] == :__datablock
-            println("Found category lookup for $(ast_node.args[3])")
+        elseif lhs != nothing && ast_node.head == :call && (ast_node.args[1] == :get_packets || (ast_node.args[1] == :get_category && ast_node.args[2] == :__datablock))
+            @debug "Category/packet variable $lhs now in scope"
             push!(in_scope_list,String(lhs))
             return ast_node
         elseif ast_node.head in [:for]
             new_scope_list = deepcopy(in_scope_list)
-            println("New scope!")
+            @debug "New scope!"
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,new_scope_list,cifdic,
                                           lhs=nothing) for x in ast_node.args]
-            println("At end of scope: $new_scope_list")
+            @debug "At end of scope: $new_scope_list"
             return ixpr
         # Fix the actual indexing
         elseif ast_node.head == :call && ast_node.args[1] == :getindex
-            println("Found call of getindex")
+            @debug "Found call of getindex"
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
                                           lhs=nothing) for x in ast_node.args]
             if !(String(ast_node.args[2]) in in_scope_list)
                 ixpr.args[3] = :($(ixpr.args[3])+1)
             else  #a bona-fide dREL packet selection!
-                println("Expanding key-based indexing for $(ast_node.args[2])")
+                @debug "Expanding key-based indexing for $(ast_node.args[2])"
                 keyname = get_single_keyname(cifdic,String(ast_node.args[2]))
                 ixpr.args[3] = :(Dict($keyname=>$(ixpr.args[3])))
             end
             return ixpr
         elseif ast_node.head == :ref
-            println("Found subscription: $(ast_node.args)")
+            @debug "Found subscription: $(ast_node.args)"
             ixpr.head = ast_node.head
             ixpr.args = [ast_fix_indexing(x,in_scope_list,cifdic,
                                           lhs=nothing) for x in ast_node.args]
@@ -312,7 +312,7 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
             found_target = :__dreltarget
             if is_matrix
                 if typeof(ast_node.args[2]) == Expr && ast_node.args[2].head == :vect
-                    println("Fixing implicit matrix assignment")
+                    @debug "Fixing implicit matrix assignment"
                     ixpr.args[2] = :(to_julia_array($(ast_node.args[2])))
                 else
                     ixpr.args[2] = ast_node.args[2]
@@ -328,7 +328,7 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
     elseif typeof(ast_node) == Expr && (ast_node.head == :ref ||
                                         ast_node.head == :(.))
         if ast_node.args[1] == Symbol(alias_name)
-            println("Found potential target! $ast_node for alias $alias_name.$target_obj")
+            @debug "Found potential target! $ast_node for alias $alias_name.$target_obj"
             if typeof(ast_node.args[2]) == QuoteNode && ast_node.args[2].value == Symbol(lowercase(target_obj)) 
                 return (alias_name,target_obj),:__dreltarget
             else
@@ -340,7 +340,7 @@ find_target(ast_node,alias_name,target_obj;is_matrix=false) = begin
     # New style drel_property_access(a,"objectid",__datablock)
     elseif typeof(ast_node) == Expr && ast_node.head == :call && ast_node.args[1] == :drel_property_access
         if ast_node.args[2] == alias_name
-            println("Found potential target! $ast_node for alias $alias_name.$target_obj")
+            @debug "Found potential target! $ast_node for alias $alias_name.$target_obj"
             if ast_node.args[3] == lowercase(target_obj) 
                 return (alias_name,target_obj),:__dreltarget
             else
@@ -473,7 +473,7 @@ first assignment only.
 ==#
 
 get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
-    println("###\n\n $ast_node \n\n####")
+    @debug "###\n\n $ast_node \n\n####"
     dn_list = Tuple{String,String}[]
     calc_cat = found_cats[Symbol("__packet")]
     if typeof(ast_node) == Expr
@@ -486,22 +486,22 @@ get_all_datanames(ast_node,found_cats,set_cats,all_cats) = begin
                     if rhs_symb.args[1] == :first_packet   #a Set category
                         found_cats[lh] = rhs_symb.args[2].args[3]
                         #first_packet(get_category(__datablock,<set category>))
-                        println("Assignment of $(found_cats[lh]) to $lh")
+                        @debug "Assignment of $(found_cats[lh]) to $lh"
                     elseif rhs_symb.args[1] == :get_category  #Loop category
                         found_cats[lh] = rhs_symb.args[3]
-                        println("Assignment of $(found_cats[lh]) to $lh")
+                        @debug "Assignment of $(found_cats[lh]) to $lh"
                     end
                 end
                 map(q -> append!(dn_list,q),
                     [get_all_datanames(x,found_cats,set_cats,all_cats) for x in ast_node.args])
             elseif typeof(rhs_symb) == Symbol && String(rhs_symb) in all_cats
                 found_cats[lh] = String(rhs_symb)
-                println("Assignment of $rhs_symb to $lh")
+                @debug "Assignment of $rhs_symb to $lh"
             elseif rhs_symb == :__packet
                 found_cats[lh] = calc_cat
-                println("__packet -> $lh")
+                @debug "__packet -> $lh"
             else
-                println("Warning: ignoring $rhs_symb")
+                @warn "Warning: ignoring $rhs_symb"
             end
         elseif ast_node.head in [:for]
             map(q -> append!(dn_list,q),

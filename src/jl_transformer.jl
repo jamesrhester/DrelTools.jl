@@ -24,9 +24,7 @@ already been processed.
 
 ==#
 
-@rule_holder
-
-@contains_rules mutable struct TreeToJulia <: Transformer
+mutable struct TreeToJulia <: Transformer
     target_cat::String
     target_object::String
     is_func::Bool
@@ -73,8 +71,8 @@ TreeToJulia(dataname,data_dict;is_validation=false,att_dict=Dict(),extra_cats=St
     func_cat,func_list = get_dict_funcs(data_dict)
     is_func = target_cat == func_cat
     nspace = get_dic_namespace(data_dict)
-    println("Creating transformer with $target_cat . $target_object
-with cat_list $cat_list in namespace $nspace")
+    @debug "Creating transformer with $target_cat . $target_object
+with cat_list $cat_list in namespace $nspace"
     TreeToJulia(target_cat,target_object,is_func,is_validation,
                 is_category,
                 cat_list,att_dict,func_list,Set(),[],Symbol(target_cat),
@@ -97,7 +95,7 @@ a fully-transformed parse tree
 @inline_rule input(t::TreeToJulia,arg) = begin
     if t.is_func return arg end
     header = Expr(:block,:(__dict=get_dictionary(__datablock,$(t.namespace))))
-    println("Final category list: $(t.cat_ids)")
+    @debug "Final category list: $(t.cat_ids)"
     for (n,c) in t.cat_ids
         if !isnothing(n)
             push!(header.args,
@@ -135,7 +133,7 @@ end
 
 # A function definition is an anonymous function
 @inline_rule funcdef(t::TreeToJulia,f,id,args,suite) = begin
-    #println("Function body:\n$suite")
+    @debug "Function body:\n$suite"
     @assert suite.head == :block
     reverse!(suite.args)
     for (n,c) in t.cat_ids
@@ -146,12 +144,12 @@ end
         end
     end
     push!(suite.args,Expr(Symbol("="),Symbol("__dict"),:(get_dictionary(__datablock,$(t.namespace)))))
-    if !ismissing(id)
-        push!(suite.args,Expr(:call,:println,:(String("Entered function ")),String(id)))
-    end
+    #if !ismissing(id)
+    #    push!(suite.args,Expr(:call,:println,:(String("Entered function ")),String(id)))
+    #end
     reverse!(suite.args)
     push!(suite.args, :(return $id))
-    #println("New function body:\n$suite")
+    @debug "New function body:\n$suite"
     func_def = :(($(args...),__datablock::DynamicRelationalContainer)-> $suite)
     return func_def
 end
@@ -186,7 +184,7 @@ have matched with reals if they reach this rule.
 end
 
 @rule real(t::TreeToJulia,r) = begin
-    #println("Real rule, passed $r")
+    @debug "Real rule, passed $r"
     extra = length(r)
     if r[end-1] == "-"
         extra = length(r)-2
@@ -207,7 +205,7 @@ end
 end
 
 @inline_rule ident(t::TreeToJulia,id) = begin
-    #println("Identifier: $id")
+    @debug "Identifier: $id"
     lid = lowercase(id)
     if lid == "twopi"
         return :(2π)
@@ -226,7 +224,7 @@ end
 end
 
 @rule nident(t::TreeToJulia,nid) = begin
-    println("namespace id $nid")
+    @debug "namespace id $nid"
     if length(nid) == 2
         # catch target category
         if nid[1] == t.namespace && String(nid[2]) == t.target_cat
@@ -240,7 +238,7 @@ end
         if String(nid[1]) == t.target_cat
             return :__packet
         elseif String(nid[1]) in t.cat_list
-            println("Found category $(nid[1])")
+            @debug "Found category $(nid[1])"
             push!(t.cat_ids,(nothing,String(nid[1])))
         end
         return nid[1]
@@ -251,7 +249,7 @@ end
     if length(idl) == 1
         return idl
     else
-        #println("A real id_list: $idl of type $(typeof(idl))")
+        @debug "A real id_list: $idl of type $(typeof(idl))"
         @assert typeof(idl) == Array{Any,1}
         push!(idl[1],idl[end])
         return idl[1]
@@ -265,9 +263,9 @@ end
 # Do we even need parenth forms in dREL now that tuples
 # are gone?
 @inline_rule parenth_form(t::TreeToJulia,_,arg,_) = begin
-    #println("Passed $arg")
+    @debug "Passed $arg"
     final = if length(arg) == 1 arg[1] else arg end
-    #println("Returning $final")
+    @debug "Returning $final"
     return final
 end
 
@@ -367,17 +365,17 @@ end
 
 @inline_rule subscription(t::TreeToJulia,a,b) =  begin
     if typeof(b) <: Array
-        println("Sub: Processing array $b")
+        @debug "Sub: Processing array $b"
         Expr(:ref,a,b...)
     elseif typeof(b) <: Dict  #dotlist
-        println("Sub: Processing dotlist $b")
+        @debug "Sub: Processing dotlist $b"
         fullexpr = :($a[])
         for (obj,val) in b
             push!(fullexpr.args,:($(QuoteNode(obj))=>$val))
         end
         return fullexpr
     else typeof(b) <: Expr
-        println("Sub: processing $(typeof(b))")
+        @debug "Sub: processing $(typeof(b))"
         Expr(:ref,a,b)
     end
 end
@@ -398,9 +396,9 @@ end
     return setexpr    
 end
 
-@inline_rule attributeref(t::TreeToJulia,a,b) = begin
-    println("Attribute ref: $a . $b")
-    println("Watching for $(t.target_category_alias) . $(t.target_object)")
+@inline_rule attributeref(t::TreeToJulia,a,_,b) = begin
+    @debug "Attribute ref: $a . $b"
+    @debug "Watching for $(t.target_category_alias) . $(t.target_object)"
     if (a == :__packet || a == t.target_category_alias) &&
         lowercase(b) == t.target_object
         return :__dreltarget
@@ -415,7 +413,7 @@ end
 # An expression list is a real list of expressions
 @rule expression_list(t::TreeToJulia,args) = begin
     result = filter(x-> x!= ",",args)
-    #println("After expression list: $result")
+    @debug "After expression list: $result"
     return result
 end
 
@@ -437,19 +435,13 @@ end
     elseif op == "--="    #remove
         result = :(filter!(x->x != $(rhs[1]),$(lhs[1])))
     end
-    #println("$result")
+    @debug "$result"
     return result
 end
                  
 @inline_rule lhs(t::TreeToJulia,a) = a
 
 @inline_rule rhs(t::TreeToJulia,a) = a
-
-@inline_rule att_primary(t::TreeToJulia,arg) = begin
-    #println("Att_primary: $arg")
-    return arg
-end
-
 
 # Slicing
 
@@ -498,7 +490,7 @@ this is type "code", it should be caseless?
 
 ==#
 @rule call(t::TreeToJulia,args) = begin
-    println("Call: $args")
+    @debug "Call: $args"
     func_name = lowercase(String(args[1]))
     if func_name in ["list","array"]
         if length(args) == 3
@@ -521,17 +513,17 @@ end
 # Statements
 
 @rule simple_statement(t::TreeToJulia,args) = begin
-    #println("A simple statement: $args")
+    @debug "A simple statement: $args"
     if length(args) == 1
         return args[1]
     else
-        #println("Wrapping in a block: $args")
+        @debug "Wrapping in a block: $args"
         return Expr(:block,args...)
     end
 end
 
 @inline_rule small_statement(t::TreeToJulia,arg) = begin
-    #println("A small statement: $arg")
+    @debug "A small statement: $arg"
     if arg isa Expr return arg end
     if arg.type_ == "BREAK"
         return :(break)
@@ -547,7 +539,7 @@ end
 @rule statements(t::TreeToJulia,args) = begin
     if length(args) == 1 return args[1] end
     if args[1] isa Expr && args[1].head == :block
-        #println("Statements: adding to end of block $args")
+        @debug "Statements: adding to end of block $args"
         push!(args[1].args,args[2])
         return args[1]
     end
@@ -569,10 +561,10 @@ end
 
 # Suite is a list of arguments
 @rule suite(t::TreeToJulia,args) = begin
-    #println("suite: Processing $args")
+    @debug "suite: Processing $args"
     if args[1] isa Expr
         @assert length(args) == 1
-        #println("One stmt only: $(args[1].head)")
+        @debug "One stmt only: $(args[1].head)"
         if args[1].head == :block
             return args[1]
         end
@@ -595,7 +587,7 @@ end
             end
         end
     end
-    #println("If stmt: $basic_if")
+    @debug "If stmt: $basic_if"
     return basic_if
 end
 
@@ -630,8 +622,7 @@ end
 # at each iteration
 #
 @rule do_stmt(t::TreeToJulia,args) = begin
-    println("Args for do stmt: $args")
-    #println("$(dump(args[2]))")
+    @debug "Args for do stmt: $args"
     increment = length(args) > 5 ? args[5] : 1
     dummy_var = Symbol("__"*String(args[2]))
     result = :(
@@ -647,7 +638,7 @@ end
         return :($id1 = $id2::Union{CifCategory,CatPacket};$suite)
     else
         t.target_category_alias = id1
-        println("Target category alias set to $(t.target_category_alias)")
+        @debug "Target category alias set to $(t.target_category_alias)"
         return :($id1 = $id2;$suite)
     end
 end
@@ -742,6 +733,6 @@ transform_function_name(in_name,func_args) = begin
     elseif test_name == "sort"
         return :(sort!($(func_args...)))
     end
-    println("Going with plain $in_name, $(func_args...)")
+    @debug "Going with plain $in_name, $(func_args...)"
     return Expr(:call,Symbol(in_name),func_args...)   #dictionary defined
 end

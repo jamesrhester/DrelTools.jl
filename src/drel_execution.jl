@@ -39,12 +39,11 @@ as categories.
 """
 make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
     tree = Lerche.parse(drel_parser,drel_text)
-    #println("Rule dict: $(get_rule_dict())")
+    @debug "Rule dict: $(get_rule_dict())"
     transformer = TreeToJulia(dataname,dict,extra_cats = reserved)
     proto = Lerche.transform(transformer,tree)
     tc_alias = transformer.target_category_alias
-    println("Proto-Julia code: ")
-    println(proto)
+    @debug "Proto-Julia code: " proto
     #println("Target category aliased to $tc_alias")
     unique!(append!(reserved,get_categories(dict)))
     parsed = ast_fix_indexing(proto,reserved,dict)
@@ -55,7 +54,7 @@ make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
         is_matrix = (container_type == "Matrix" || container_type == "Array")
         ft,parsed = find_target(parsed,tc_alias,transformer.target_object;is_matrix=is_matrix)
         if ft == nothing && !transformer.is_func
-            println("WARNING: no target identified for $dataname")
+            @warn "WARNING: no target identified for $dataname"
         end
     end
     parsed = fix_scope(parsed)
@@ -79,14 +78,14 @@ define_dict_funcs!(dict) = begin
     #Parse and evaluate all dictionary-defined functions and store
     func_cat,all_funcs = get_dict_funcs(dict)
     for f in all_funcs
-        println("Now processing $f")         
+        @debug "Now processing $f"         
         full_def = dict[find_name(dict,func_cat,f)]
         entry_name = full_def[:definition].id[]
         full_name = lowercase(full_def[:name].object_id[])
         func_text = full_def[:method][!,:expression][1]
-        println("Function text: $func_text")
+        @debug "Function text: $func_text"
         result = make_julia_code(func_text,entry_name,dict)
-        println("Transformed text: $result")
+        @debug "Transformed text: $result"
         set_func!(dict,full_name,result,eval(result))  #store in dictionary
     end
 end
@@ -203,12 +202,12 @@ end
 #
 cache_value!(d::DynamicDDLmRC,nspace::String,name::String,value) = begin
     if haskey(d.value_cache[nspace],lowercase(name))
-        println("WARNING: overwriting previously cached value for $name")
-        println("Old length: $(length(d.value_cache[nspace][name]))")
-        println("New length: $(length(value))")
+        @warn "WARNING: overwriting previously cached value for $name"
+        @warn "Old length: $(length(d.value_cache[nspace][name]))"
+        @warn "New length: $(length(value))"
         if length(value) < 150
-            println("Old values: $(d.value_cache[nspace][name])")
-            println("New values: $(value)")
+            @warn "Old values: $(d.value_cache[nspace][name])"
+            @warn "New values: $(value)"
         end
     end
     d.value_cache[nspace][lowercase(name)] = value
@@ -394,7 +393,7 @@ get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String) = begin
         end
     end
     if !haskey(d.cat_cache[nspace],s)
-        println("Category $s not found for namespace $nspace")
+        @info "Category $s not found for namespace $nspace"
         return missing
     end
     return d.cat_cache[nspace][s]  
@@ -427,7 +426,7 @@ repair_cat(d::DynamicDDLmRC,l::LegacyCategory,nspace) = begin
         add_new_func(d,keyname,nspace)
     end
     func_code = get_func(dict,keyname)
-    println("Preparing to invoke code for $keyname")
+    @debug "Preparing to invoke code for $keyname"
     keyvals = [Base.invokelatest(func_code,d,p) for p in l]
     cache_value!(d,nspace,keyname,keyvals)
     return LoopCategory(l,keyvals)
@@ -452,7 +451,7 @@ get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = b
     # perhaps we can lookup a default value?
     m = all_from_default(dict,s,target_loop)
     if any(x->!ismissing(x),m)
-        println("Result of lookup for $s: $m")
+        @debug "Result of lookup for $s: $m"
         return m
     end
     # end of the road for non dREL dictionaries
@@ -465,8 +464,8 @@ get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = b
     try
         return [Base.invokelatest(func_code,db,p) for p in target_loop]
     catch e
-        println("$(typeof(e)) when executing default dREL for $s/enumeration.default, should not happen")
-        println("Function text: $(get_def_meth_txt(dict,s,"enumeration.default"))")
+        @warn "$(typeof(e)) when executing default dREL for $s/enumeration.default, should not happen"
+        @warn "Function text: $(get_def_meth_txt(dict,s,"enumeration.default"))"
         rethrow(e)
     end
     throw(error("should never reach this point"))
@@ -508,8 +507,8 @@ derive(b::DynamicRelationalContainer,s::SetCategory,dataname::AbstractString,dic
     try
         [Base.invokelatest(func_code,b,pkt)]
     catch e
-        println("Warning: error $(typeof(e)) in dREL method for $dataname, should never happen.")
-        println("Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))")
+        @warn "Warning: error $(typeof(e)) in dREL method for $dataname, should never happen."
+        @warn "Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))"
         rethrow(e)
     end
 end
@@ -526,8 +525,8 @@ derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::AbstractString,di
     try
         [Base.invokelatest(func_code,b,p) for p in s]
     catch e
-        println("Warning: error $(typeof(e)) in dREL method for $dataname, should never happen.")
-        println("Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))")
+        @warn "Warning: error $(typeof(e)) in dREL method for $dataname, should never happen."
+        @warn "Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))"
         rethrow(e)
     end
 end
@@ -563,8 +562,8 @@ derive(p::CatPacket,obj::AbstractString,db) = begin
     try
         Base.invokelatest(func_code,db,p)
     catch e
-        println("$(typeof(e)) when evaluating $cat.$obj, should not happen")
-        println("Function text: $(get_func_text(dict,dataname))")
+        @warn "$(typeof(e)) when evaluating $cat.$obj, should not happen"
+        @warn "Function text: $(get_func_text(dict,dataname))"
         rethrow(e)
     end
 end
@@ -587,8 +586,8 @@ derive_category(b::DynamicRelationalContainer,cat::AbstractString,nspace) = begi
     if t == "" return end
     if !(has_func(dict,cat))
         add_new_func(b,cat,nspace)
-    else
-        println("Func for $cat already exists")
+    #else
+    #    println("Func for $cat already exists")
     end
     func_code = get_func(dict,cat)
     col_vals = Base.invokelatest(func_code,b)
@@ -619,10 +618,10 @@ get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) 
         add_definition_func!(dict,dataname)
     end
     func_code = get_def_meth(dict,dataname,"enumeration.default")
-    debug_info = get_def_meth_txt(dict,dataname,"enumeration.default")
-    println("==== Invoking default function for $dataname ===")
-    println("Stored code:")
-    println(debug_info)
+    # debug_info = get_def_meth_txt(dict,dataname,"enumeration.default")
+    #println("==== Invoking default function for $dataname ===")
+    #println("Stored code:")
+    #println(debug_info)
     return Base.invokelatest(func_code,block,cp)
 end
 
@@ -636,7 +635,7 @@ add_new_func(b::DynamicRelationalContainer,s::AbstractString,nspace) = begin
     # get all categories mentioned
     all_cats = String[]
     for n in get_namespaces(b)
-        println("Namespace $n")
+        @debug "Namespace $n"
         append!(all_cats,get_categories(get_dictionary(b,n)))
     end
     add_new_func(dict,s,all_cats)
@@ -649,13 +648,12 @@ add_new_func(d::AbstractCifDictionary,s::AbstractString,special_names) = begin
     else
         r = Meta.parse("(a,b) -> missing")
     end
-    println("Transformed code for $s:\n")
-    println(r)
+    @debug "Transformed code for $s:\n" r
     set_func!(d,s, r, eval(r))
 end
 
 add_new_func(d::AbstractCifDictionary,s::AbstractString) = begin
-    println("Warning: recognising only categories from $(get_dic_name(d))")
+    @warn "Warning: recognising only categories from $(get_dic_name(d))"
     add_new_func(d,s,String[])
 end
 
@@ -694,14 +692,13 @@ add_definition_func!(d,s) = begin
         for (a,targ) in all_set_ddlm
             ft,r = find_target(r,Symbol(a),targ)
             if ft != nothing
-                println("Found target: $ft")
+                @debug "Found target: $ft"
                 att_name = "$a.$targ"
                 break
             end
         end
-        println("For dataname $s, attribute $att_name")
-        println("Transformed code:\n")
-        println(r)
+        @debug "For dataname $s, attribute $att_name"
+        @debug "Transformed code:\n" r
         set_func!(d,s,att_name,r,eval(r))
     end
 end
