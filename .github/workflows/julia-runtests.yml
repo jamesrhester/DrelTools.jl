@@ -30,6 +30,8 @@ jobs:
       - uses: julia-actions/julia-buildpkg@latest
         name: Run test no coverage
       - uses: julia-actions/julia-runtest@latest
+        env: 
+          JULIA_DEBUG: DrelTools
         with:
                 coverage: 'false'
       - name: Do the coverage run
