@@ -9,7 +9,7 @@ jobs:
             LD_LIBRARY_PATH: ${{ github.workspace }}/lib:/usr/lib:/lib:/lib64
     strategy:
       matrix:
-        julia-version: ['1.2', '1', 'nightly']
+        julia-version: ['1.6', '1', 'nightly']
         julia-arch: [x64, x86]
         os: [ubuntu-latest]
         exclude:
@@ -30,17 +30,19 @@ jobs:
       - uses: julia-actions/julia-buildpkg@latest
         name: Run test no coverage
       - uses: julia-actions/julia-runtest@latest
+        env: 
+          JULIA_DEBUG: DrelTools
         with:
                 coverage: 'false'
       - name: Do the coverage run
-        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        if: matrix.julia-version == '1.6' && matrix.julia-arch == 'x64'
         uses: julia-actions/julia-runtest@latest
       - name: Process the coverage run
-        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        if: matrix.julia-version == '1.6' && matrix.julia-arch == 'x64'
         run: |
                        julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; LCOV.writefile("lcov.info",process_folder())'
       - name: Upload coverage data
-        if: matrix.julia-version == '1.2' && matrix.julia-arch == 'x64'
+        if: matrix.julia-version == '1.6' && matrix.julia-arch == 'x64'
         uses: coverallsapp/github-action@master
         with:
               github-token: ${{ secrets.GITHUB_TOKEN }}
