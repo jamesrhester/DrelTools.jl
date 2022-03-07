@@ -89,11 +89,11 @@ const _drel_grammar_spec = raw"""
     att_primary : nident | attributeref | subscription | call 
 ?primary : att_primary | literal | enclosure 
     attributeref : att_primary PERIOD  ( ID | INTEGER )  
-    subscription : primary  "["  (proper_slice | slice_list | dotlist)  "]" 
+    subscription : primary  LSQUAREB  (proper_slice | slice_list | dotlist)  RSQUAREB 
     dotlist :  dotlist_element ("," dotlist_element )* 
     dotlist_element : ("."  ident  "="  expression)
     
-    proper_slice : short_slice | long_slice 
+    proper_slice : short_slice | long_slice
     short_slice : COLON | (expression  COLON  expression) | (COLON expression) | (expression  COLON) 
     long_slice : short_slice  COLON  expression 
     slice_list : (expression | proper_slice) ( COMMA (expression | proper_slice) )* 
@@ -127,7 +127,7 @@ const _drel_grammar_spec = raw"""
     if_stmt : IF "(" expression ")" suite (else_if_stmt)* [else_stmt]
     else_stmt : ELSE  suite 
     else_if_stmt : ELSEIF  "("  expression  ")" suite 
-    for_stmt : FOR  (id_list | "[" id_list "]")  IN  expression_list  suite 
+    for_stmt : FOR  (id_list | LSQUAREB id_list RSQUAREB )  IN  expression_list  suite 
     id_list : [id_list  ","]  ident 
     
     loop_stmt :  LOOP ident AS nident [ COLON  ident  [restricted_comp_operator  ident]] suite 

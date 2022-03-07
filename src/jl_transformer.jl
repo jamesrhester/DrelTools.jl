@@ -363,7 +363,7 @@ end
     end
 end
 
-@inline_rule subscription(t::TreeToJulia,a,b) =  begin
+@inline_rule subscription(t::TreeToJulia,a,_,b,_) =  begin
     if typeof(b) <: Array
         @debug "Sub: Processing array $b"
         Expr(:ref,a,b...)
@@ -600,8 +600,8 @@ end
 end
 
 @rule for_stmt(t::TreeToJulia,args) = begin
-    if length(args) == 5 # square bracket form
-        _,idl,_,exps,suite = args
+    if length(args) == 7
+        _,_,idl,_,_,exps,suite = args
     else
         idl,exps,suite = args
     end
