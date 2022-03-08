@@ -1,14 +1,11 @@
 
 # Configuration
-#const drel_grammar = joinpath(@__DIR__,"lark_grammar.ebnf")
 
-#include("lark_grammar.ebnf")
+# Deserialise a parser for the dREL grammar. This is serialized in the build phase of
+# module installation, see deps/build.jl . If the EBNF is changed, run 'julia build.jl'
+# in that directory.
 
-# Create a parser for the dREL grammar. It needs to be contextual
-# due to such issues as an isolated variable "j" being parsed as the
-# signifier for an imaginary number.
-
-const drel_parser = Serialization.deserialize(joinpath(@__DIR__,"..","deps","drel_grammar_serialised.jli"))
+const drel_parser = Serialization.deserialize(joinpath(@get_scratch!("lark_grammar"),"drel_grammar_serialised.jli"))
 
 # Parse and output proto-Julia code using Lerche
 

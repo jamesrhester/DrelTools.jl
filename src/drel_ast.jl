@@ -106,7 +106,7 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
             elseif typeof(ast_node.args[2]) != Expr && String(ast_node.args[2]) in set_cats
                 return ast_construct_type(ast_node,cifdic,String(ast_node.args[2]),String(ast_node.args[3]))
             else
-                @warn "property access using unrecognised object $(ast_node)"
+                @debug "WARNING: property access using unrecognised object $(ast_node)"
                 ixpr.head = ast_node.head
                 ixpr.args = ast_node.args
                 return ixpr
