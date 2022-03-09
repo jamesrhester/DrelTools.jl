@@ -16,6 +16,7 @@ CrystalInfoFramework = "^0.4"
 DataFrames = "1"
 Lerche = "0.5"
 julia = "^1.4"
+Scratch = "^1.1"
 
 [extras]
 FilePaths = "8fc22ac5-c921-52a6-82fd-178b2807b824"
