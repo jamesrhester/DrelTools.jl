@@ -1,5 +1,4 @@
-
-@testset "Testing expression processing" begin
+@testset "Testing complex expression processing" begin
     #ud = prepare_system()
     t = DDLm_Dictionary(joinpath(@__DIR__,"cif_core.dic"))
     rawtext = :(a = [1,2,3,4]; b = a[0]; return b)

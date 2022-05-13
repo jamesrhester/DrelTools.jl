@@ -41,7 +41,7 @@ make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
     proto = Lerche.transform(transformer,tree)
     tc_alias = transformer.target_category_alias
     @debug "Proto-Julia code: " proto
-    #println("Target category aliased to $tc_alias")
+    @debug "Target category aliased to $tc_alias"
     unique!(append!(reserved,get_categories(dict)))
     parsed = ast_fix_indexing(proto,reserved,dict)
     #println(parsed)
@@ -61,6 +61,9 @@ make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
     parsed = ast_assign_types(parsed,Dict(Symbol("__packet")=>transformer.target_cat),cifdic=dict,set_cats=set_categories,all_cats = reserved)
     if !transformer.is_category
         parsed = ast_assign_retval(parsed,dict,transformer.target_cat,find_object(dict,dataname))
+    else
+        all_objs = get_objs_in_cat(dict,transformer.target_cat)
+        parsed = ast_assign_retval(parsed,dict,transformer.target_cat,all_objs)
     end
     return parsed
 end

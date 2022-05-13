@@ -701,6 +701,7 @@ transform_function_name(in_name,func_args) = begin
         "strip"=> :drel_strip,
         "eigen"=> :drel_eigen,
         "split"=> :drel_split,
+        "indexin"=> :drel_index,
       "sind"=> :sind,
       "cosd"=> :cosd,
       "tand"=> :tand,

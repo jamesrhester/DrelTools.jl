@@ -191,16 +191,16 @@ drel_property_access(cp,obj,datablock::DynamicRelationalContainer) = begin
     dataname = find_name(dict,catname,obj)
     result = missing
     rowno = getfield(cp,:id)
-    #println("Looking for property $obj in $(source_cat.data_ptr)")
+    @debug "Looking for property $obj in $catname"
     try
         result = getproperty(cp,Symbol(obj))  #non-deriving form
     catch e  #TODO define our own error
-        println("Property $obj not present in $catname (error $(typeof(e)))")
+        @debug "Property $obj not present in $catname (error $(typeof(e)))"
         #println("$(catch_backtrace())")
-        println("Continuing with deriving version")
+        @debug "Continuing with deriving version"
         if !haskey(datablock,dataname,namespace)
             # populate the column with 'missing' values
-            println("$obj is missing, adding missing values")
+            @debug "$obj is missing, adding missing values"
             # explicitly set type otherwise DataFrames thinks it is Missing only
             new_array = Array{Union{Missing,Any},1}(missing,length(source_cat))
             cache_value!(datablock, namespace, dataname, new_array)
@@ -209,10 +209,10 @@ drel_property_access(cp,obj,datablock::DynamicRelationalContainer) = begin
         end
     end
     if !ismissing(result) && !isnothing(result)
-        #println("Found! $result")
+        # @debug "Found! $result"
         return result
     elseif isnothing(result)
-        #println("Found! nothing")
+        # @debug "Found! nothing"
         return result
     end
     m = derive(cp,obj,datablock)
@@ -254,4 +254,16 @@ occurrence of character.
 """
 drel_split(s::String,c) = begin
     return split(s,c)
+end
+
+"""
+    drel_index(haystack,needle)
+
+Implements the drel "indexin" function. Return -1 if `needle` is
+not found in vector `haystack`, otherwise provide the 0-based
+location in `haystack`.
+"""
+drel_index(v::Vector,c) = begin
+    q = indexin([c],v)[]
+    q == nothing ? -1 : q-1
 end

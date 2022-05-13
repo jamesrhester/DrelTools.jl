@@ -2,6 +2,7 @@
 using CrystalInfoFramework
 using CrystalInfoFramework.DataContainer
 using DrelTools
+using Lerche
 using FilePaths
 using Test
 
@@ -20,6 +21,7 @@ setup() = begin
     return DynamicDDLmRC(t,p)
 end
 
+include("./simple_expressions.jl")
 include("./dynamic.jl")
 include("./expressions.jl")
 include("./drel_exec.jl")

@@ -8,6 +8,7 @@ CrystalInfoFramework = "6007d9b0-c6b2-11e8-0510-1d10e825f3f1"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Lerche = "d42ef402-04e6-4356-9f73-091573ea58dc"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Scratch = "6c6a2e73-6563-6170-7368-637461726353"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
@@ -15,8 +16,9 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 CrystalInfoFramework = "^0.4"
 DataFrames = "1"
 Lerche = "0.5"
-julia = "^1.4"
 Scratch = "^1.1"
+MacroTools = "0.5"
+julia = "^1.4"
 
 [extras]
 FilePaths = "8fc22ac5-c921-52a6-82fd-178b2807b824"

@@ -49,8 +49,8 @@ const _drel_grammar_spec = raw"""
     real : ((INTEGER PERIOD [INTEGER])|(PERIOD INTEGER))[("E"|"e"i) [PLUS|MINUS] INTEGER ]
     
     imaginary : (real | INTEGER) ("j"i|"J")
-    LONGSTRING : /'''[^\\][.\n]*'''|\"""[^\\][.\n]*\"""/
-    SHORTSTRING : /'[^']*'|"[^"]*"/
+    LONGSTRING : /'''(''[^']|'[^']|[^'])*'''|\"\"\"(\"\"[^\"]|\"[^\"]|[^\"])*\"\"\"/
+    SHORTSTRING : /'[^'\n]*'|"[^"\n]*"/
     AND : "and"i
     OR : "or"i
     IN : "in"i
@@ -81,12 +81,12 @@ const _drel_grammar_spec = raw"""
     nident : [ nspace ] ident 
     
     enclosure : parenth_form | list_display | table_display 
-    parenth_form : LEFTPAREN expression_list RIGHTPAREN 
+    parenth_form : LEFTPAREN [ expression_list ] RIGHTPAREN 
     
     list_display : LSQUAREB  [ expression_list ] RSQUAREB 
     expression_list : expression ( COMMA expression )* 
     
-    table_display : LEFTBRACE  table_contents RIGHTBRACE 
+    table_display : LEFTBRACE [ table_contents ] RIGHTBRACE 
     table_contents : table_entry ( COMMA table_entry )* 
     table_entry : SHORTSTRING  COLON  expression 
     att_primary : nident | attributeref | subscription | call 

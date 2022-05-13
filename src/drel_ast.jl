@@ -1,5 +1,6 @@
 
 export ast_fix_indexing,fix_scope,find_target, cat_to_packet, get_all_datanames
+using MacroTools: @capture,postwalk
 
 #==
 For simplicity, the Python-Lark transformer does not annotate
@@ -121,25 +122,40 @@ ast_assign_types(ast_node,in_scope_dict;lhs=nothing,cifdic=Dict(),set_cats=Array
     end
 end
 
+"""
+    Assign type of return values for dataname
+"""
 ast_assign_retval(ast_node,cifdic,cat,obj) = begin
-    ixpr = :(:call,:f)  #dummy
-    if typeof(ast_node) == Expr
-        if ast_node.head == :return
-            final_type,final_cont = get_julia_type_name(cifdic,cat,obj)
-            if final_type == :CaselessString && final_cont == "Single"
-                ast_node = :(if !ismissing($(ast_node.args[1])) return $final_type($(ast_node.args[1])) else return $(ast_node.args[1]) end)
-                @debug "Return statement now $ast_node"
-                return ast_node
-            else
-                return ast_node
-            end
+    postwalk(ast_node) do x
+        @capture(x, return r_ ) || return x
+        final_type,final_cont = get_julia_type_name(cifdic,cat,obj)
+        if final_type == :CaselessString && final_cont == "Single"
+            return :(return (!ismissing($r) && $r != nothing) ? $final_type($r) : $r)
         else
-            ixpr.head = ast_node.head
-            ixpr.args = [ast_assign_retval(x,cifdic,cat,obj) for x in ast_node.args]
-            return ixpr
+            return :(return $r)
         end
-    else
-        return ast_node
+    end
+end
+
+"""
+    Assign the type of the return values for a category method
+"""
+ast_assign_retval(ast_node,cifdic,cat,objlist::Vector) = begin
+    @debug "Fixing return values for $cat"
+    # Use MacroTools
+    postwalk(ast_node) do x
+        @capture(x, return r_) || return x #return statement
+        new_x = postwalk(r) do y
+            @capture(y, a_ => b_) || return y
+            final_type,final_cont = get_julia_type_name(cifdic,cat,a)
+            if final_type == :CaselessString && final_cont == "Single"
+                @debug "Fixing return type for $cat $a"
+                return :($a => CaselessString.($b))
+            else
+                return y
+            end
+        end
+        :(return $new_x)
     end
 end
 
