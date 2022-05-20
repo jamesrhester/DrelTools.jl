@@ -1,0 +1,76 @@
+#\#CIF_2.0
+##############################################################################
+#                                                                            #
+#                      Test dictionary                                       #
+#                                                                            #
+#   Strictly for testing dREL parsing routines for correctness               #
+#                                                                            #
+#                                                                            #
+##############################################################################
+data_TEST_DIC
+
+    _dictionary.title            TEST_DIC
+    _dictionary.class            Instance
+    _dictionary.version          3.14.0
+    _dictionary.date             2020-06-30
+    _dictionary.uri              file:///here
+    _dictionary.ddl_conformance  3.14.0
+    _dictionary.namespace        CORE_DIC
+    _description.text
+;
+     This dictionary contains the definitions of attributes that are used in
+     the testing routines in this directory.
+;
+
+save_TEST_DATANAMES
+
+    _definition.id               TEST_DATANAMES
+    _definition.scope            Category
+    _definition.class            Head
+    _definition.update           2011-07-27
+    _description.text
+;
+     This category is parent of all other categories in the dictionary.
+;
+    _name.object_id              TEST_DATANAMES
+    _name.category_id            TEST_DIC
+
+save_
+
+#============================================================================
+
+save_RV
+
+    _definition.id               RV
+    _definition.scope            Category
+    _definition.class            Set
+    _definition.update           2013-09-08
+    _description.text
+;
+     Category holding items that should have single, real values
+;
+    _name.category_id            TEST_DATANAMES
+    _name.object_id              RV
+
+save_
+
+
+save_rv.output
+
+    _definition.id               '_rv.output'
+    _definition.class            Attribute
+    _definition.update           2019-04-02
+    _description.text
+;
+     Dummy data name that should have a numerical value
+;
+    _name.category_id            rv
+    _name.object_id              output
+    _type.purpose                Number
+    _type.source                 Derived
+    _type.container              Single
+    _type.contents               Real
+
+save_
+
+
