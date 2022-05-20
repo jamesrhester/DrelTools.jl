@@ -81,15 +81,18 @@ const _drel_grammar_spec = raw"""
     nident : [ nspace ] ident 
     
     enclosure : parenth_form | list_display | table_display 
-    parenth_form : LEFTPAREN [ expression_list ] RIGHTPAREN 
+    parenth_form : LEFTPAREN ( expression ) RIGHTPAREN 
     
     list_display : LSQUAREB  [ expression_list ] RSQUAREB 
-    expression_list : expression ( COMMA expression )* 
+    expression_list : expression ( COMMA expression )*
     
     table_display : LEFTBRACE [ table_contents ] RIGHTBRACE 
     table_contents : table_entry ( COMMA table_entry )* 
-    table_entry : SHORTSTRING  COLON  expression 
-    att_primary : nident | attributeref | subscription | call 
+    table_entry : SHORTSTRING  COLON  expression
+    assignable : nident | subscription | attributeref
+    assignable_list : assignable ( COMMA assignable )*
+
+    att_primary : assignable | call 
 ?primary : att_primary | literal | enclosure 
     attributeref : att_primary PERIOD  ( ID | INTEGER )  
     subscription : primary  LSQUAREB  (proper_slice | slice_list | dotlist)  RSQUAREB 
@@ -119,7 +122,7 @@ const _drel_grammar_spec = raw"""
     simple_statement : small_statement ( ";"  small_statement )* 
     small_statement : assignment | dotlist_assign | BREAK | NEXT 
     assignment :  lhs augop rhs 
-    lhs : expression_list 
+    lhs : assignable_list 
     rhs : expression_list 
     dotlist_assign : nident "("  dotlist  ")" 
     
@@ -131,15 +134,15 @@ const _drel_grammar_spec = raw"""
     else_stmt : ELSE  suite 
     else_if_stmt : ELSEIF  "("  expression  ")" suite 
     for_stmt : FOR  (id_list | LSQUAREB id_list RSQUAREB )  IN  expression_list  suite 
-    id_list : [id_list  ","]  ident 
+    id_list : ident ( COMMA ident )* ; 
     
     loop_stmt :  LOOP ident AS nident [ COLON  ident  [restricted_comp_operator  ident]] suite 
     do_stmt : DO ident  "=" expression  ","  expression  [","  expression] suite 
     repeat_stmt : REPEAT suite 
     with_stmt : WITH  ident  AS  nident  suite 
     funcdef : FUNCTION  ident  "("  arglist  ")"  suite 
-    arglist : one_arg | (arglist COMMA one_arg) 
-    one_arg : ident  ":"  "["  expression  ","  expression  "]" 
+    arglist : one_arg ( COMMA one_arg)* 
+    one_arg : ident  ":"  "["  ident  ","  ident  "]" 
     input : statements 
 
 """

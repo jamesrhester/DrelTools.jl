@@ -259,7 +259,7 @@ end
 """
     drel_index(haystack,needle)
 
-Implements the drel "indexin" function. Return -1 if `needle` is
+Implements the drel "indexof" function. Return -1 if `needle` is
 not found in vector `haystack`, otherwise provide the 0-based
 location in `haystack`.
 """

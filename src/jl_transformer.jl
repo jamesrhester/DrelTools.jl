@@ -245,28 +245,23 @@ end
     end
 end
 
-@rule id_list(t::TreeToJulia,idl) = begin
-    if length(idl) == 1
-        return idl
-    else
-        @debug "A real id_list: $idl of type $(typeof(idl))"
-        @assert typeof(idl) == Array{Any,1}
-        push!(idl[1],idl[end])
-        return idl[1]
+@rule id_list(t::TreeToJulia,args) = begin
+    @debug "id_list before" args
+    if length(args) == 1 return args else
+        push!(args[1],args[end])
     end
+    @debug "id_list after" args[1]
+    return args[1]
 end
 
 @inline_rule enclosure(t::TreeToJulia,arg) = arg
 @inline_rule primary(t::TreeToJulia,arg) = arg
 @inline_rule att_primary(t::TreeToJulia,arg) = arg
 
-# Do we even need parenth forms in dREL now that tuples
-# are gone?
-@inline_rule parenth_form(t::TreeToJulia,_,arg,_) = begin
-    @debug "Passed $arg"
-    final = if length(arg) == 1 arg[1] else arg end
-    @debug "Returning $final"
-    return final
+@rule parenth_form(t::TreeToJulia,args) = begin
+    @debug "Parenth_form passed $args"
+    if length(args) == 2 return :() end
+    return :($(args[2]))
 end
 
 
@@ -409,11 +404,17 @@ end
 
     
 @inline_rule expression(t::TreeToJulia,arg) = arg
+@inline_rule assignable(t::TreeToJulia,arg) = arg
 
 # An expression list is a real list of expressions
 @rule expression_list(t::TreeToJulia,args) = begin
     result = filter(x-> x!= ",",args)
     @debug "After expression list: $result"
+    return result
+end
+
+@rule assignable_list(t::TreeToJulia,args) = begin
+    result = filter(x-> x!= ",", args)
     return result
 end
 
@@ -603,7 +604,7 @@ end
     if length(args) == 7
         _,_,idl,_,_,exps,suite = args
     else
-        idl,exps,suite = args
+        _,idl,_,exps,suite = args
     end
     if length(exps) > 1
         forblock = Expr(:for, Expr(:(=),Expr(:tuple,idl...),Expr(:tuple,exps...)),suite)
@@ -701,7 +702,7 @@ transform_function_name(in_name,func_args) = begin
         "strip"=> :drel_strip,
         "eigen"=> :drel_eigen,
         "split"=> :drel_split,
-        "indexin"=> :drel_index,
+        "indexof"=> :drel_index,
       "sind"=> :sind,
       "cosd"=> :cosd,
       "tand"=> :tand,
