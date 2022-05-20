@@ -134,7 +134,7 @@ const _drel_grammar_spec = raw"""
     else_stmt : ELSE  suite 
     else_if_stmt : ELSEIF  "("  expression  ")" suite 
     for_stmt : FOR  (id_list | LSQUAREB id_list RSQUAREB )  IN  expression_list  suite 
-    id_list : ident ( COMMA ident )* ; 
+    id_list : ident ( COMMA ident )* 
     
     loop_stmt :  LOOP ident AS nident [ COLON  ident  [restricted_comp_operator  ident]] suite 
     do_stmt : DO ident  "=" expression  ","  expression  [","  expression] suite 
