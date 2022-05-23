@@ -246,12 +246,7 @@ end
 end
 
 @rule id_list(t::TreeToJulia,args) = begin
-    @debug "id_list before" args
-    if length(args) == 1 return args else
-        push!(args[1],args[end])
-    end
-    @debug "id_list after" args[1]
-    return args[1]
+    result = filter(x-> x!= ",", args)
 end
 
 @inline_rule enclosure(t::TreeToJulia,arg) = arg
@@ -551,10 +546,7 @@ end
 
 @inline_rule compound_statement(t::TreeToJulia,arg) = arg
 
-@rule arglist(t::TreeToJulia,arg) = begin
-    if length(arg) == 1 return arg end
-    push!(arg[1],arg[3])
-end
+@rule arglist(t::TreeToJulia,args) = filter(x-> x!= ",", args)
 
 @inline_rule one_arg(t::TreeToJulia,id,first,second) = begin
     return Symbol(id)  #drop the annotations

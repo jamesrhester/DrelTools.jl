@@ -11,7 +11,16 @@
            }
            rv.output = cumsum
            """, 44)
-    for (teststring,correct) in (teststring1,)
+    teststring2 = ("""
+           cumsum = 0
+           q = [[1,2,3,4],[3,4,5,6],[5,6,7,8]]
+           for a,b,c,d in q {
+                cumsum += a*b+c*d
+           }
+           rv.output = cumsum
+           """, 142)
+
+    for (teststring,correct) in (teststring1,teststring2)
         r = make_julia_code(teststring,"_rv.output",testdic)
         println("$teststring \n========\n\n$r")
         new_func = eval(r)
