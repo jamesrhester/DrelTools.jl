@@ -265,5 +265,6 @@ location in `haystack`.
 """
 drel_index(v::Vector,c) = begin
     q = indexin([c],v)[]
+    @debug "Index of $c in " v
     q == nothing ? -1 : q-1
 end

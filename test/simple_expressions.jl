@@ -1,5 +1,5 @@
 @testset "Test compound expressions" begin
-    testdic = DDLm_Dictionary("dic_for_tests.dic")
+    testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
     block = DynamicDDLmRC(Dict(),testdic)
     cif_cat = SetCategory("rv",Dict("output"=>0),testdic)
 
@@ -22,7 +22,7 @@
 end
 
 @testset "Test evaluation of simple expressions" begin
-    testdic = DDLm_Dictionary("dic_for_tests.dic")
+    testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
     test_tuples = (("0.5 * (1.0 + 2.0)",1.5),)
     block = DynamicDDLmRC(Dict(),testdic)
     cif_cat = SetCategory("rv",Dict("output"=>0),testdic)
