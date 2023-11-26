@@ -13,7 +13,7 @@ Scratch = "6c6a2e73-6563-6170-7368-637461726353"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
 [compat]
-CrystalInfoFramework = "^0.4"
+CrystalInfoFramework = "^0.6"
 DataFrames = "1"
 Lerche = "0.5"
 Scratch = "^1.1"
