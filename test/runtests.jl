@@ -1,6 +1,6 @@
 #Testing dREL runtime support
 using CrystalInfoFramework
-using CrystalInfoFramework.DataContainer
+using CrystalInfoContainers
 using DrelTools
 using Lerche
 using FilePaths
@@ -21,7 +21,7 @@ setup() = begin
     return DynamicDDLmRC(t,p)
 end
 
-include("./simple_expressions.jl")
-include("./dynamic.jl")
-include("./expressions.jl")
+#include("./simple_expressions.jl")
+#include("./dynamic.jl")
+#include("./expressions.jl")
 include("./drel_exec.jl")

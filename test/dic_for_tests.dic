@@ -51,6 +51,7 @@ save_RV
 ;
     _name.category_id            TEST_DATANAMES
     _name.object_id              RV
+    _category_key.name           '_rv.id'
 
 save_
 
@@ -73,4 +74,20 @@ save_rv.output
 
 save_
 
+save_rv.id
 
+    _definition.id               '_rv.id'
+    _definition.class            Attribute
+    _definition.update           2025-03-15
+    _description.text
+;
+     Required key data name for simplicity
+;
+    _name.category_id            rv
+    _name.object_id              id
+    _type.purpose                Key
+    _type.source                 Assigned
+    _type.container              Single
+    _type.contents               Code
+
+save_

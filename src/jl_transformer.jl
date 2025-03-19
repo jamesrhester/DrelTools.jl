@@ -689,7 +689,6 @@ transform_function_name(in_name,func_args) = begin
         "complex"=> :complex,
         "max"=> :max,
         "min"=> :min,
-        "current_row"=> :current_row,
         "float"=> :Float64,
         "strip"=> :drel_strip,
         "eigen"=> :drel_eigen,
@@ -726,6 +725,8 @@ transform_function_name(in_name,func_args) = begin
         return :(($(func_args...)).$(Symbol(test_name)))
     elseif test_name == "sort"
         return :(sort!($(func_args...)))
+    elseif test_name == "current_row"
+        return Expr(:call, :current_row, String(func_args[1]) , :__packet)
     end
     @debug "Going with plain $in_name, $(func_args...)"
     return Expr(:call,Symbol(in_name),func_args...)   #dictionary defined

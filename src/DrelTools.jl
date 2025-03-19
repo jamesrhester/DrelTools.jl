@@ -1,7 +1,7 @@
 module DrelTools 
 
 using CrystalInfoFramework
-using CrystalInfoFramework.DataContainer
+using CrystalInfoContainers
 using DataFrames
 using Lerche
 using Serialization
@@ -17,10 +17,6 @@ export DynamicRelationalContainer, DynamicDDLmRC, DynamicCat
 export find_namespace
 export drelvector,to_julia_array,drel_strip,drel_split,DrelTable
 export get_category,make_julia_code
-
-import CrystalInfoFramework.DataContainer:get_key_datanames, get_value, get_name
-import CrystalInfoFramework.DataContainer:get_category, has_category, get_data, get_dictionary
-import CrystalInfoFramework.DataContainer:select_namespace,get_namespaces
 
 import Base:keys,haskey,show,getindex,setindex!,values,iterate,length
 

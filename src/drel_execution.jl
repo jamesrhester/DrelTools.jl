@@ -36,7 +36,6 @@ as categories.
 """
 make_julia_code(drel_text,dataname,dict; reserved=AbstractString[]) = begin
     tree = Lerche.parse(drel_parser,drel_text)
-    @debug "Rule dict: $(get_rule_dict())"
     transformer = TreeToJulia(dataname,dict,extra_cats = reserved)
     proto = Lerche.transform(transformer,tree)
     tc_alias = transformer.target_category_alias
@@ -108,7 +107,7 @@ corresponding dictionary.
 abstract type DynamicRelationalContainer <: AbstractRelationalContainer end
 
 struct DynamicDDLmRC <: DynamicRelationalContainer
-    data
+    data::AbstractRelationalContainer
     dict::Dict{String,AbstractCifDictionary} #provides dREL functions
     value_cache::Dict{String,Dict{String,Any}} #namespace indexed
     cat_cache::Dict{String,Dict{String,CifCategory}}
@@ -130,13 +129,13 @@ DynamicDDLmRC(ds::DataSource, dict::AbstractCifDictionary) = begin
     DynamicDDLmRC(IsDataSource(),ds,dict)
 end
 
-DynamicDDLmRC(ds,dict::AbstractCifDictionary) = begin
+DynamicDDLmRC(ds, dict::AbstractCifDictionary) = begin
     DynamicDDLmRC(DataSource(ds),ds,dict)
 end
 
 DynamicDDLmRC(::IsDataSource,ds,dict) = begin
     nspace = get_dic_namespace(dict)
-    DynamicDDLmRC(ds,Dict(nspace=>dict),
+    DynamicDDLmRC(RelationalContainer(ds),Dict(nspace=>dict),
                   Dict(nspace=>Dict{String,Any}()),
                   Dict(nspace=>Dict{String,CifCategory}()))
 end
@@ -152,15 +151,20 @@ DynamicDDLmRC(r::AbstractRelationalContainer) = begin
     DynamicDDLmRC(r,get_dicts(r),d,c)
 end
 
-get_namespaces(d::DynamicDDLmRC) = collect(keys(d.value_cache))
+DynamicDDLmRC(r::TypedDataSource) = begin
+    DynamicDDLmRC(RelationalContainer(r), get_dictionary(r))
+end
+
+CrystalInfoContainers.name_to_catobj(d::DynamicDDLmRC, t) = find_cat_obj(get_dictionary(d), t)
+CrystalInfoContainers.get_namespaces(d::DynamicDDLmRC) = return collect(keys(d.value_cache))
 
 """
-find_namespace(d::DynamicDDLmRC,dataname)
+find_namespace(d::DynamicDDLmRC, dataname::AbstractString)
 
 Find a single namespace in `d` that knows about `dataname`. If no such namespace exists,
 an error is thrown
 """
-find_namespace(d::DynamicDDLmRC,dataname) = begin
+CrystalInfoContainers.find_namespace(d::DynamicDDLmRC, dataname::AbstractString) = begin
     nspaces = get_namespaces(d)
     if length(nspaces) == 1 return nspaces[] end
     potentials  = [n for n in nspaces if haskey(d.dict[n],dataname)]
@@ -235,16 +239,16 @@ cache_cat!(d::DynamicDDLmRC,nspace,catname,catvalue) = begin
     d.cat_cache[nspace][catname] = catvalue
 end
 
-get_dictionary(d::DynamicDDLmRC) = d.dict[get_namespaces(d)[]]
+CrystalInfoContainers.get_dictionary(d::DynamicDDLmRC) = d.dict[get_namespaces(d)[]]
 
-get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
+CrystalInfoContainers.get_dictionary(d::DynamicDDLmRC,nspace) = d.dict[nspace]
 
 # We treat ourselves as a data source so that the
 # cached values and supplied values are both accessible
 
-get_data(d::DynamicDDLmRC) = d
+CrystalInfoContainers.get_data(d::DynamicDDLmRC) = d
 
-select_namespace(d::DynamicDDLmRC,nspace) = begin
+CrystalInfoContainers.select_namespace(d::DynamicDDLmRC,nspace) = begin
     filtered_data = TypedDataSource(Dict{String,Any}(),d.dict[nspace])
     try
         filtered_data = select_namespace(d.data,nspace)
@@ -304,6 +308,10 @@ haskey(d::DynamicDDLmRC,s,n) = begin
     return s in keys(d,n)
 end
 
+## Getindex/Setindex
+
+# Symbols are category/object references. Strings are namespace/dataname references
+
 """
     getindex(d::DynamicDDLmRC,s)
 
@@ -313,7 +321,7 @@ missing values from dREL methods if available.
 
 If `s` appears in multiple namespaces within `d`, an error is raised.
 """
-getindex(d::DynamicDDLmRC,s) = begin
+getindex(d::DynamicDDLmRC, s::AbstractString) = begin
     n = find_namespace(d,s)
     return d[s,n]
 end
@@ -327,10 +335,10 @@ are returned in an order corresponding to the order in which key data name value
 provided, meaning that the returned values can be assembled into a table without
 further manipulation.
 """
-getindex(d::DynamicDDLmRC,s,nspace) = begin
+getindex(d::DynamicDDLmRC, s::AbstractString, nspace::AbstractString) = begin
     ls = lowercase(s)
-    small_r = select_namespace(d,nspace)
-    if haskey(small_r.data,ls) return small_r.data[ls] end
+    small_r = select_namespace(d, nspace)
+    if haskey(small_r.data, ls) return small_r.data[ls] end
     if haskey(small_r.value_cache[nspace],ls) return small_r.value_cache[nspace][ls] end
     m = derive(d,s,nspace)
     if ismissing(m) throw(KeyError("$s")) end
@@ -372,24 +380,27 @@ Return a `CifCategory` named `s` in namespace `nspace` from `d`, creating the
 category using dREL category methods if missing. If `s` is already present, no further
 data names from that category are derived.
 """
-get_category(d::DynamicDDLmRC,s::AbstractString,nspace::String) = begin
+CrystalInfoContainers.get_category(d::DynamicDDLmRC, s::AbstractString, nspace::String) = begin
     if haskey(d.cat_cache[nspace],s)
         return d.cat_cache[nspace][s]
     end
     dict = get_dictionary(d,nspace)
-    if is_set_category(dict,s)   #an empty category is good enough
-        d.cat_cache[nspace][s] = construct_category(d,s,nspace)
-    elseif has_category(d,s,nspace)
-        c = construct_category(d,s,nspace)
-        if typeof(c) != LegacyCategory
+    #if is_set_category(dict,s)   #an empty category is good enough
+    #    d.cat_cache[nspace][s] = construct_category(d,s,nspace)
+    if CrystalInfoContainers.has_category(d, s, nspace)
+        c = construct_category(d, s, nspace)
+        key_names = get_keys_for_cat(dict, s)
+        if all(x -> haskey(d, x, nspace), key_names)
             d.cat_cache[nspace][s] = c
         else
-            d.cat_cache[nspace][s] = repair_cat(d,c,nspace)
+            d.cat_cache[nspace][s] = repair_cat(d, c, nspace)
         end
     else
-        derive_category(d,s,nspace)   #worth a try
-        if has_category(d,s,nspace)
-            d.cat_cache[nspace][s] = construct_category(d,s,nspace)
+        derive_category(d, s, nspace)   #worth a try
+        if CrystalInfoContainers.has_category(d, s, nspace)
+
+            @debug "Retrying construction of $s"
+            d.cat_cache[nspace][s] = construct_category(d, s, nspace)
         end
     end
     if !haskey(d.cat_cache[nspace],s)
@@ -407,15 +418,42 @@ category using dREL category methods if missing. If `s` is already present, no f
 data names from that category are derived. If `s` is ambiguous because it is 
 present in multiple namespaces, an error is raised.
 """
-get_category(d::DynamicDDLmRC,s) = begin
+CrystalInfoContainers.get_category(d::DynamicDDLmRC, s::AbstractString) = begin
     n = find_namespace(d,s)
     get_category(d,s,n)
 end
 
+"""
+    has_category(d::DynamicDDLmRC, s)
+
+Return true if `d` already has items from `s`.
+"""
+CrystalInfoContainers.has_category(d::DynamicDDLmRC, s::AbstractString) = begin
+    n = find_namespace(d, s)
+    CrystalInfoContainers.has_category(d, s, n)
+end
+
+CrystalInfoContainers.has_category(d::DynamicDDLmRC, s::AbstractString, nspace) = begin
+
+    if CrystalInfoContainers.has_category(d.data, s, nspace)
+        return true
+    end
+    
+
+    if lowercase(s) in keys(d.cat_cache[nspace])
+        return true
+    end
+
+    dict = get_dictionary(d, nspace)
+    poss_names = get_names_in_cat(dict, s)
+    any( x -> x in keys(d.value_cache[nspace]), poss_names)    
+end
+
+
 # Legacy categories may appear without their key, for which
 # the DDLm dictionary may provide a method.
 
-repair_cat(d::DynamicDDLmRC,l::LegacyCategory,nspace) = begin
+repair_cat(d::DynamicDDLmRC, l::LoopCategory,nspace) = begin
     dict = get_dictionary(d,nspace)
     s = get_name(l)
     # derive any single missing key
@@ -426,10 +464,10 @@ repair_cat(d::DynamicDDLmRC,l::LegacyCategory,nspace) = begin
         add_new_func(d,keyname,nspace)
     end
     func_code = get_func(dict,keyname)
-    @debug "Preparing to invoke code for $keyname"
+    @debug "Preparing to invoke code for $keyname" l
     keyvals = [Base.invokelatest(func_code,d,p) for p in l]
     cache_value!(d,nspace,keyname,keyvals)
-    return LoopCategory(l,keyvals)
+    return LoopCategory(d, String(s))
 end
 
 
@@ -441,7 +479,7 @@ get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = b
     dict = get_dictionary(db,nspace)
     def_vals = CrystalInfoFramework.get_default(dict,s)
     cat_name = find_category(dict,s)
-    if !has_category(db,cat_name,nspace) && get_cat_class(dict,cat_name) != "Set"
+    if !CrystalInfoContainers.has_category(db,cat_name,nspace) && get_cat_class(dict,cat_name) != "Set"
         throw(error("Cannot provide default value for $s,category $cat_name does not exist for namespace $nspace"))
     end
     target_loop = get_category(db,cat_name,nspace)
@@ -468,49 +506,25 @@ get_default(db::DynamicRelationalContainer,s::AbstractString,nspace::String) = b
         @warn "Function text: $(get_def_meth_txt(dict,s,"enumeration.default"))"
         rethrow(e)
     end
-    throw(error("should never reach this point"))
 end
 
 """
-    derive(b::DynamicRelationalContainer,dataname,nspace)
+    derive(b::DynamicRelationalContainer, dataname, nspace)
 
-Derive values for `dataname` in `nspace` missing from `b`. Return `missing`
+Derive values for `dataname` in `nspace`, missing from `b`. Return `missing`
 if the category itself is missing, otherwise return an Array potentially
 containing missing values with one value for each row in the category.
 """
-derive(b::DynamicRelationalContainer,dataname::AbstractString,nspace) = begin
+derive(b::DynamicRelationalContainer, dataname::AbstractString, nspace) = begin
     dict = get_dictionary(b,nspace)
-    target_loop = get_category(b,find_category(dict,dataname),nspace)
+    target_loop = get_category(b, find_category(dict,dataname), nspace)
     if ismissing(target_loop) return missing end
-    return derive(b,target_loop,dataname,dict,nspace)
+    return derive(b, target_loop, dataname, dict, nspace)
 end
 
 derive(b::DynamicDDLmRC,dataname::AbstractString) = begin
     nspaces = get_namespaces(b)
     derive(b,dataname,nspaces[])
-end
-
-derive(b::DynamicRelationalContainer,s::SetCategory,dataname::AbstractString,dict,nspace) = begin
-    obj = find_object(dict,dataname)
-    if haskey(s,dataname) return s[Symbol(obj)] end
-    if !has_drel_methods(dict) return missing end
-    if !(has_func(dict,dataname))
-        add_new_func(b,dataname,nspace)
-    end
-    func_code = get_func(dict,dataname)
-    pkt = first_packet(s)
-    #if length(keys(s)) == 0   # no data
-    #    pkt = nothing
-    #else
-    #    pkt = first(s)
-    #end
-    try
-        [Base.invokelatest(func_code,b,pkt)]
-    catch e
-        @warn "Warning: error $(typeof(e)) in dREL method for $dataname, should never happen."
-        @warn "Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))"
-        rethrow(e)
-    end
 end
 
 derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::AbstractString,dict,nspace) = begin
@@ -528,16 +542,6 @@ derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::AbstractString,di
         @warn "Warning: error $(typeof(e)) in dREL method for $dataname, should never happen."
         @warn "Method text: $(CrystalInfoFramework.get_func_text(dict,dataname))"
         rethrow(e)
-    end
-end
-
-#
-# Deal with empty legacy categories which might pop up
-#
-derive(b::DynamicRelationalContainer,s::LegacyCategory,dataname,dict,nspace) = begin
-    if length(s) == 0 return []
-    else
-        throw(error("Legacy category $(get_name(s)) is missing key datanames; derivation of $dataname is not possible"))
     end
 end
 
@@ -580,10 +584,19 @@ Category methods create whole new categories
 
 ==#
 
-derive_category(b::DynamicRelationalContainer,cat::AbstractString,nspace) = begin
+derive_category(b::DynamicRelationalContainer, cat::AbstractString, nspace) = begin
+
+    @debug "Deriving $cat"
+    
     dict = get_dictionary(b,nspace)
     t = load_func_text(dict,cat,"Evaluation")
-    if t == "" return end
+    if t == ""
+
+        @debug "Deriving $cat from default values"
+        
+        derive_category_from_defaults(b, cat, nspace)
+        return
+    end
     if !(has_func(dict,cat))
         add_new_func(b,cat,nspace)
     #else
@@ -598,6 +611,40 @@ derive_category(b::DynamicRelationalContainer,cat::AbstractString,nspace) = begi
     end
 end
 
+"""
+    As no category creation dREL is available, we rely on default values, with a single
+    row.
+"""
+derive_category_from_defaults(b::DynamicRelationalContainer, cat::AbstractString, nspace) = begin
+    dict = get_dictionary(b, nspace)
+    data_names = get_names_in_cat(dict, cat)
+
+    # Loop over names trying to get defaults
+
+    dummy = LoopCategory(b, cat, nspace)
+    cp = CatPacket(-1, dummy)
+    
+    map(data_names) do d
+        
+        def_val = CrystalInfoFramework.get_default(dict, d)
+        if ismissing(def_val)
+            if has_default_methods(dict)
+                if !has_def_meth(dict, d, "_enumeration.default")
+                    add_definition_func!(dict, d)
+                end
+
+                func_code = get_def_meth(dict, d, "enumeration.default")
+                def_val = Base.invokelatest(func_code, b, cp)
+            end
+        end
+
+        if !ismissing(def_val)
+            b[d, nspace] = [def_val]
+            @debug "New value from defaults" d def_val
+        end
+    end
+end
+    
 # For a single row in a packet
 get_default(block::DynamicRelationalContainer,cp::CatPacket,obj::Symbol,nspace) = begin
     dict = get_dictionary(block,nspace)

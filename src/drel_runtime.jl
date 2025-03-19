@@ -183,7 +183,7 @@ This call corresponds to `cp.obj` in dREL code. If `obj` is not a property of `c
 `datablock` is used to try to derive a value, returning `missing` for all failures
 and caching the result in `datablock` if successful.
 """
-drel_property_access(cp,obj,datablock::DynamicRelationalContainer) = begin
+drel_property_access(cp, obj, datablock::DynamicRelationalContainer) = begin
     source_cat = get_category(cp)
     catname = get_name(source_cat)
     dict = get_dictionary(cp)
@@ -222,6 +222,14 @@ drel_property_access(cp,obj,datablock::DynamicRelationalContainer) = begin
     # store the cached value
     cache_value!(datablock,namespace,dataname,rowno, m)
     return m
+end
+
+drel_property_access(c::CifCategory, obj, datablock::DynamicRelationalContainer) = begin
+    if length(c) > 1
+        throw(error("Trying to access cat $(get_name(c)).$obj with more than one packet"))
+    else
+        return drel_property_access(first(c), obj, datablock)
+    end
 end
 
 drel_property_access(::Missing,obj::String,datablock::DynamicRelationalContainer) = missing

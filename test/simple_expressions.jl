@@ -1,7 +1,7 @@
 @testset "Test compound expressions" begin
     testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
-    block = DynamicDDLmRC(Dict(),testdic)
-    cif_cat = SetCategory("rv",Dict("output"=>0),testdic)
+    block = DynamicDDLmRC(TypedDataSource(Dict(),testdic))
+    cif_cat = LoopCategory(block, "rv")
 
     teststring1 = ("""
            cumsum = 0
@@ -33,8 +33,8 @@ end
 @testset "Test evaluation of simple expressions" begin
     testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
     test_tuples = (("0.5 * (1.0 + 2.0)",1.5),)
-    block = DynamicDDLmRC(Dict(),testdic)
-    cif_cat = SetCategory("rv",Dict("output"=>0),testdic)
+    block = DynamicDDLmRC(TypedDataSource(Dict(),testdic))
+    cif_cat = LoopCategory(block, "rv")
     for (expr,correct) in test_tuples
         r = make_julia_code("rv.output = " * expr,"_rv.output",testdic)
         println("$expr \n========\n\n$r")
