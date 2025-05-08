@@ -21,6 +21,12 @@ jobs:
       - uses: julia-actions/setup-julia@latest
         with:
            version: ${{ matrix.julia-version }}
+      - name: checkout latest repositories 
+        uses: actions/checkout@v4
+        with:
+                repository: COMCIFS/cif_core
+                path: test/dictionaries
+
       - uses: julia-actions/julia-buildpkg@latest
         name: Run test no coverage
       - uses: julia-actions/julia-runtest@latest
