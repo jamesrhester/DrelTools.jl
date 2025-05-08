@@ -340,13 +340,23 @@ getindex(d::DynamicDDLmRC, s::AbstractString, nspace::AbstractString) = begin
     small_r = select_namespace(d, nspace)
     if haskey(small_r.data, ls) return small_r.data[ls] end
     if haskey(small_r.value_cache[nspace],ls) return small_r.value_cache[nspace][ls] end
+
+    @debug "$s not cached, proceeding to derivation"
+    
     m = derive(d,s,nspace)
+
     if ismissing(m) throw(KeyError("$s")) end
+
     accept = any(x->!ismissing(x),m)
+
     if !accept
+
+        @debug "Getting default values for $s"
         m = get_default(d,s,nspace)
     end
     if any(x->!ismissing(x),m)
+
+        @debug "Found values for $s, caching"
         setindex!(d,m,s,nspace)
         return m
     end
@@ -537,6 +547,7 @@ derive(b::DynamicRelationalContainer,s::LoopCategory,dataname::AbstractString,di
     end
     func_code = get_func(dict,dataname)
     try
+        @debug "Invoking function for $dataname"
         [Base.invokelatest(func_code,b,p) for p in s]
     catch e
         @warn "Warning: error $(typeof(e)) in dREL method for $dataname, should never happen."

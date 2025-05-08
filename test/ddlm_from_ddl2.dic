@@ -2686,7 +2686,7 @@ save_units.code
     _type.contents               Code
     _enumeration.default         Arbitrary
 
-    _import.get [{'save':units_code  'file':templ_enum.cif}]
+#    _import.get [{'save':units_code  'file':templ_enum.cif}]
 
 save_
 

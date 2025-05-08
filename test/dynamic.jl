@@ -27,5 +27,5 @@ end
 @testset "Test dynamic loop categories" begin
     l = LoopCategory(dd, "atom_site")
     @test 0.2501 in l[:fract_x]
-    q = l[:tensor_beta]
+    q = l[:matrix_beta]
 end

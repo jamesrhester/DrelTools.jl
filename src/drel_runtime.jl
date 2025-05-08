@@ -16,7 +16,7 @@ Base.:(==)(c::Char,y::String) = begin
     end
 end
 
-Base.:(+)(y::String,z::String) = y*z
+Base.:(+)(y::String,z::Union{String,Char}) = y*z
 
 # We redefine vectors so that we can fix up post and pre
 # multiplication to always work
