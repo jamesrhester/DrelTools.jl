@@ -762,7 +762,12 @@ add_definition_func!(d,s) = begin
 end
 
 all_from_default(dict,dataname,cat::CifCategory) = begin
-    convert_to_julia(dict,dataname,[lookup_default(dict,dataname,cp) for cp in cat])
+    df = [lookup_default(dict, dataname, cp) for cp in cat]
+    if any(!ismissing, df)
+        return convert_to_julia(dict,dataname,df)
+    else
+        return df
+    end
 end
 
 #== 

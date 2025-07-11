@@ -1,3 +1,20 @@
+@testset "Test tables" begin
+    testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
+    block = DynamicDDLmRC(TypedDataSource(Dict(),testdic))
+    cif_cat = LoopCategory(block, "rv")
+    table_test = """
+    rv.output = {"file":1,
+                 "version":"honey",
+                 "mode":2.4
+                }
+    """
+    r = make_julia_code(table_test, "_rv.output", testdic)
+    println("$table_test \n======\n\n$r")
+    new_func = eval(r)
+    result = Base.invokelatest(new_func, block, CatPacket(1, cif_cat))
+    @test result == Dict("file"=>1, "version"=>"honey", "mode"=> 2.4)
+end
+
 @testset "Test compound expressions" begin
     testdic = DDLm_Dictionary(joinpath(@__DIR__,"dic_for_tests.dic"))
     block = DynamicDDLmRC(TypedDataSource(Dict(),testdic))

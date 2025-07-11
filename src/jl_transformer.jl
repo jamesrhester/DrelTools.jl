@@ -274,12 +274,18 @@ end
 #== Tables
 
 ==#
-@inline_rule table_entry(t::TreeToJulia,key,colon,value) = :($key=>$value)
+@inline_rule table_entry(t::TreeToJulia,key,colon,value) = begin
+    ss = key.value[2:end-1]
+    ss=>value
+end
 
-@rule table_contents(t::TreeToJulia,args) = args
+@rule table_contents(t::TreeToJulia,args) = begin
+    result = filter( x-> x != ",", args)
+    return result
+end
 
 @inline_rule table_display(t::TreeToJulia,lbr,contents,rbr) = begin
-    return :(Dict($contents...))
+    return :(Dict{String, Any}($contents...))
 end
                          
 @rule arith(t::TreeToJulia,args) = begin
